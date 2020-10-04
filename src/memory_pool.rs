@@ -1,13 +1,23 @@
+use replace_with::replace_with_and_return;
+
 #[allow(dead_code)]
 pub struct MemoryPool<'pool> {
     blocks: Vec<Box<[u8]>>,
     block_size: usize,
-    remaining_space_ref: &'pool mut [u8],
+    remaining_space_ref: Option<&'pool mut [u8]>,
     memory_usage: usize,
 }
 
 #[allow(dead_code)]
 impl<'pool> MemoryPool<'pool> {
+    pub fn new(block_size: usize) -> MemoryPool<'static> {
+        MemoryPool {
+            blocks: vec![],
+            block_size,
+            remaining_space_ref: None,
+            memory_usage: 0,
+        }
+    }
     pub fn size(&self) -> usize {
         self.memory_usage
     }
@@ -15,15 +25,25 @@ impl<'pool> MemoryPool<'pool> {
     pub fn allocate(&'pool mut self, bytes: usize) -> &'pool mut [u8] {
         self.memory_usage += bytes;
 
-        if bytes < self.remaining_space_ref.len() {
-            let (result, new_ref) = self.remaining_space_ref.split_at_mut(bytes + 1);
+        if bytes < self.remaining_space() {
+            replace_with_and_return(
+                &mut self.remaining_space_ref,
+                || None,
+                |reference| {
+                    let (right, left) = reference.unwrap().split_at_mut(bytes + 1);
 
-            self.remaining_space_ref = new_ref;
-
-            result
+                    (right, Some(left))
+                },
+            )
         } else {
             self.allocate_fallback(bytes)
         }
+    }
+
+    fn remaining_space(&self) -> usize {
+        self.remaining_space_ref
+            .as_ref()
+            .map_or(0, |reference| reference.len())
     }
 
     fn create_block(bytes: usize) -> Box<[u8]> {
@@ -49,16 +69,15 @@ impl<'pool> MemoryPool<'pool> {
             let block_box = Self::create_block(self.block_size);
             self.blocks.push(block_box);
 
-            let (result, new_ref) = self
-                .blocks
-                .last_mut()
-                .unwrap()
-                .as_mut()
-                .split_at_mut(bytes + 1);
+            replace_with_and_return(
+                &mut self.remaining_space_ref,
+                || None,
+                |reference| {
+                    let (right, left) = reference.unwrap().split_at_mut(bytes + 1);
 
-            self.remaining_space_ref = new_ref;
-
-            result
+                    (right, Some(left))
+                },
+            )
         }
     }
 }
