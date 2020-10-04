@@ -1,26 +1,24 @@
 #[allow(dead_code)]
-pub struct MemoryPool {
+pub struct MemoryPool<'pool> {
     blocks: Vec<Box<[u8]>>,
     block_size: usize,
-    size_remaining: usize,
-    current_ptr: *mut u8,
+    remaining_space_ref: &'pool mut [u8],
     memory_usage: usize,
 }
 
 #[allow(dead_code)]
-impl MemoryPool {
+impl<'pool> MemoryPool<'pool> {
     pub fn size(&self) -> usize {
         self.memory_usage
     }
 
-    pub fn allocate(&mut self, bytes: usize) -> *mut u8 {
+    pub fn allocate(&'pool mut self, bytes: usize) -> &'pool mut [u8] {
         self.memory_usage += bytes;
 
-        if bytes < self.size_remaining {
-            let result = self.current_ptr;
+        if bytes < self.remaining_space_ref.len() {
+            let (result, new_ref) = self.remaining_space_ref.split_at_mut(bytes + 1);
 
-            self.size_remaining -= bytes;
-            self.current_ptr = unsafe { self.current_ptr.add(bytes) };
+            self.remaining_space_ref = new_ref;
 
             result
         } else {
@@ -28,22 +26,37 @@ impl MemoryPool {
         }
     }
 
-    fn allocate_new_block(&mut self, bytes: usize) -> *mut u8 {
-        let mut block_box = Vec::<u8>::with_capacity(bytes).into_boxed_slice();
-        let pointer = block_box.as_mut_ptr();
-        self.blocks.push(block_box);
-
-        pointer
+    fn create_block(bytes: usize) -> Box<[u8]> {
+        Vec::<u8>::with_capacity(bytes).into_boxed_slice()
     }
 
-    fn allocate_fallback(&mut self, bytes: usize) -> *mut u8 {
+    #[inline(always)]
+    fn allocate_new_block(&'pool mut self, bytes: usize) -> &'pool mut [u8] {
+        let block_box = Vec::<u8>::with_capacity(bytes).into_boxed_slice();
+        self.blocks.push(block_box);
+
+        self.blocks.last_mut().unwrap().as_mut()
+    }
+
+    fn allocate_fallback(&'pool mut self, bytes: usize) -> &'pool mut [u8] {
         if bytes > self.block_size / 4 {
-            self.allocate_new_block(bytes)
+            let block_box = Self::create_block(bytes);
+            self.blocks.push(block_box);
+
+            self.blocks.last_mut().unwrap().as_mut()
         } else {
             // allocate a new block and waste remaining space
-            let result = self.allocate_new_block(self.block_size);
-            self.size_remaining = self.block_size - bytes;
-            self.current_ptr = unsafe { result.clone().add(bytes) };
+            let block_box = Self::create_block(self.block_size);
+            self.blocks.push(block_box);
+
+            let (result, new_ref) = self
+                .blocks
+                .last_mut()
+                .unwrap()
+                .as_mut()
+                .split_at_mut(bytes + 1);
+
+            self.remaining_space_ref = new_ref;
 
             result
         }
