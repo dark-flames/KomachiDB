@@ -1,4 +1,7 @@
+mod block;
+mod interface;
 mod memory_pool;
+mod skip_list;
 
 #[cfg(test)]
 mod tests {
