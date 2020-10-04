@@ -1,3 +1,5 @@
+mod memory_pool;
+
 #[cfg(test)]
 mod tests {
     #[test]
