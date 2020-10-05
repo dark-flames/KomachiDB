@@ -1,1 +1,1 @@
-pub trait Key {}
+pub trait Key: PartialOrd {}
