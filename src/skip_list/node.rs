@@ -3,6 +3,12 @@ use crate::interface::Key;
 use std::cmp::Ordering;
 
 #[allow(dead_code)]
+pub enum SkipListNode<'pool, K: Key> {
+    Head,
+    ValueNode(Node<'pool, K>),
+}
+
+#[allow(dead_code)]
 pub struct Node<'pool, K: Key> {
     pub block_ref: &'pool Block<'pool, K>,
     pub key: &'pool K,

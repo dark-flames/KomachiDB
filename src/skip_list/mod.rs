@@ -1,24 +1,24 @@
 use crate::interface::Key;
-use crate::skip_list::node::Node;
+use crate::skip_list::level_generator::LevelGenerator;
+use crate::skip_list::node::SkipListNode;
 
+mod level_generator;
 mod node;
 
 #[allow(dead_code)]
 pub struct SkipList<'pool, K: Key> {
-    nodes: Vec<Node<'pool, K>>,
-    entry: Option<&'pool Node<'pool, K>>,
+    entry: Box<SkipListNode<'pool, K>>,
     size: usize,
-    max_level: usize,
+    level_generator: &'static dyn LevelGenerator,
 }
 
 #[allow(dead_code)]
 impl<'pool, K: Key> SkipList<'pool, K> {
-    pub fn new(max_level: usize) -> SkipList<'static, K> {
+    pub fn new(level_generator: &'static dyn LevelGenerator) -> SkipList<'static, K> {
         SkipList {
-            nodes: vec![],
-            entry: None,
+            entry: Box::new(SkipListNode::Head),
             size: 0,
-            max_level,
+            level_generator,
         }
     }
 }
