@@ -31,6 +31,11 @@ impl<'pool, K: Key> Node<'pool, K> {
     pub fn add_level(&mut self, next: *mut Node<'pool, K>) {
         self.next.push(next)
     }
+
+    pub fn compare_key(&self, key: &K) -> Ordering {
+        self.block
+            .map_or(Ordering::Less, |block| block.key.partial_cmp(key).unwrap())
+    }
 }
 
 impl<'pool, K: Key> PartialEq for Node<'pool, K> {

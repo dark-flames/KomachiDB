@@ -1,8 +1,11 @@
 use crate::block::Block;
 use crate::interface::Key;
+use crate::skip_list::iter::SkipListInternalIterator;
 use crate::skip_list::level_generator::LevelGenerator;
 use crate::skip_list::node::Node;
+use std::cmp::Ordering;
 
+mod iter;
 mod level_generator;
 mod node;
 
@@ -47,26 +50,57 @@ impl<'pool, K: Key> SkipList<'pool, K> {
         }
     }
 
-    fn find_position(&mut self, node: *mut Node<'pool, K>) -> Vec<*mut Node<'pool, K>> {
-        let mut prev = vec![];
-        let mut current = self.entry;
-        let mut current_level = self.max_level();
+    pub fn seek(&self, key: &K) -> Option<&Block<K>> {
+        let mut iter = self.internal_iter();
 
         loop {
-            let next = unsafe { (*current).next.get(current_level).copied() };
+            let next_option = loop {
+                if iter.current_level() == 0 {
+                    break iter.peek_as_ref();
+                };
+
+                match iter.peek_as_ref() {
+                    Some(next) if next.compare_key(key) == Ordering::Greater => {
+                        iter.next_level();
+                    }
+                    Some(next) => {
+                        break Some(next);
+                    }
+                    None => {
+                        iter.next_level();
+                    }
+                };
+            };
+
+            match next_option {
+                Some(next) if next.compare_key(key) == Ordering::Less => iter.next(),
+                Some(next) if next.compare_key(key) == Ordering::Equal => {
+                    break Some(next.block.unwrap())
+                }
+                _ => None,
+            };
+        }
+    }
+
+    fn find_position(&mut self, node: *mut Node<'pool, K>) -> Vec<*mut Node<'pool, K>> {
+        let mut prev = vec![];
+        let mut iter = self.internal_iter();
+
+        loop {
+            let next = iter.peek();
 
             match next {
                 Some(next_node) if next_node < node => {
-                    current = next_node;
+                    iter.next();
                 }
                 _ => {
-                    prev.push(current);
+                    prev.push(iter.current().unwrap());
 
-                    if current_level == 0 {
+                    if iter.current_level() == 0 {
                         break;
                     } else {
-                        current_level -= 1;
-                        current = unsafe { (*current).next[current_level] };
+                        iter.next_level();
+                        iter.next();
                     }
                 }
             }
@@ -82,5 +116,9 @@ impl<'pool, K: Key> SkipList<'pool, K> {
             0 => 0,
             n => n - 1,
         }
+    }
+
+    fn internal_iter(&self) -> SkipListInternalIterator<'pool, K> {
+        SkipListInternalIterator::new(self.entry, self.max_level())
     }
 }
