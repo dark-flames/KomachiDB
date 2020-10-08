@@ -1,6 +1,6 @@
 use crate::block::Block;
 use crate::interface::Key;
-use crate::skip_list::iter::SkipListInternalIterator;
+use crate::skip_list::iter::{SkipListIterator, SkipListVisitor};
 use crate::skip_list::level_generator::LevelGenerator;
 use crate::skip_list::node::Node;
 use std::cmp::Ordering;
@@ -48,10 +48,12 @@ impl<'pool, K: Key> SkipList<'pool, K> {
                 (*prev_node).next[level] = node;
             };
         }
+
+        self.size += 1;
     }
 
     pub fn seek(&self, key: &K) -> Option<&Block<K>> {
-        let mut iter = self.internal_iter();
+        let mut iter = self.visitor();
 
         loop {
             let next_option = loop {
@@ -82,9 +84,13 @@ impl<'pool, K: Key> SkipList<'pool, K> {
         }
     }
 
+    pub fn iter(&self) -> SkipListIterator<'pool, K> {
+        self.visitor().into()
+    }
+
     fn find_position(&mut self, node: *mut Node<'pool, K>) -> Vec<*mut Node<'pool, K>> {
         let mut prev = vec![];
-        let mut iter = self.internal_iter();
+        let mut iter = self.visitor();
 
         loop {
             let next = iter.peek();
@@ -118,7 +124,7 @@ impl<'pool, K: Key> SkipList<'pool, K> {
         }
     }
 
-    fn internal_iter(&self) -> SkipListInternalIterator<'pool, K> {
-        SkipListInternalIterator::new(self.entry, self.max_level())
+    fn visitor(&self) -> SkipListVisitor<'pool, K> {
+        SkipListVisitor::new(self.entry, self.max_level())
     }
 }

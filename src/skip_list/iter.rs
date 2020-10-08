@@ -1,15 +1,15 @@
 use crate::interface::Key;
 use crate::skip_list::node::Node;
 
-pub(super) struct SkipListInternalIterator<'a, K: Key> {
+pub struct SkipListVisitor<'a, K: Key> {
     current: Option<*mut Node<'a, K>>,
     current_level: usize,
 }
 
 #[allow(dead_code)]
-impl<'a, K: Key> SkipListInternalIterator<'a, K> {
-    pub fn new(entry: *mut Node<'a, K>, max_level: usize) -> SkipListInternalIterator<'a, K> {
-        SkipListInternalIterator {
+impl<'a, K: Key> SkipListVisitor<'a, K> {
+    pub fn new(entry: *mut Node<'a, K>, max_level: usize) -> SkipListVisitor<'a, K> {
+        SkipListVisitor {
             current: Some(entry),
             current_level: max_level,
         }
@@ -33,7 +33,7 @@ impl<'a, K: Key> SkipListInternalIterator<'a, K> {
             .flatten()
     }
 
-    pub fn peek_as_ref(&self) -> Option<&Node<'a, K>> {
+    pub fn peek_as_ref(&self) -> Option<&'a Node<'a, K>> {
         unsafe { self.peek().map(|ptr| &*ptr) }
     }
 
@@ -53,5 +53,35 @@ impl<'a, K: Key> SkipListInternalIterator<'a, K> {
         }
 
         self.current_level
+    }
+}
+
+impl<'a, K: Key> Into<SkipListIterator<'a, K>> for SkipListVisitor<'a, K> {
+    fn into(mut self) -> SkipListIterator<'a, K> {
+        self.current_level = 0;
+
+        SkipListIterator::new(self)
+    }
+}
+
+pub struct SkipListIterator<'a, K: Key> {
+    visitor: SkipListVisitor<'a, K>,
+}
+
+impl<'a, K: Key> SkipListIterator<'a, K> {
+    pub fn new(visitor: SkipListVisitor<'a, K>) -> SkipListIterator<'a, K> {
+        SkipListIterator { visitor }
+    }
+}
+
+impl<'a, K: Key> Iterator for SkipListIterator<'a, K> {
+    type Item = &'a Node<'a, K>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let result = self.visitor.peek_as_ref();
+
+        self.visitor.next();
+
+        result
     }
 }
