@@ -1,20 +1,22 @@
-use replace_with::replace_with_and_return;
+use std::ptr;
 
 #[allow(dead_code)]
-pub struct MemoryPool<'pool> {
+pub struct MemoryPool {
     blocks: Vec<Box<[u8]>>,
     block_size: usize,
-    remaining_space_ref: Option<&'pool mut [u8]>,
+    remaining_space_ptr: Option<*mut u8>,
+    remaining_space: usize,
     memory_usage: usize,
 }
 
 #[allow(dead_code)]
-impl<'pool> MemoryPool<'pool> {
-    pub fn new(block_size: usize) -> MemoryPool<'static> {
+impl MemoryPool {
+    pub fn new(block_size: usize) -> MemoryPool {
         MemoryPool {
             blocks: vec![],
             block_size,
-            remaining_space_ref: None,
+            remaining_space_ptr: None,
+            remaining_space: 0,
             memory_usage: 0,
         }
     }
@@ -22,62 +24,104 @@ impl<'pool> MemoryPool<'pool> {
         self.memory_usage
     }
 
-    pub fn allocate(&'pool mut self, bytes: usize) -> &'pool mut [u8] {
+    pub fn allocate(&mut self, bytes: usize) -> *mut [u8] {
         self.memory_usage += bytes;
 
         if bytes < self.remaining_space() {
-            replace_with_and_return(
-                &mut self.remaining_space_ref,
-                || None,
-                |reference| {
-                    let (right, left) = reference.unwrap().split_at_mut(bytes + 1);
+            let result = self.remaining_space_ptr.unwrap();
+            self.remaining_space_ptr =
+                Some(unsafe { self.remaining_space_ptr.unwrap().add(bytes) });
 
-                    (right, Some(left))
-                },
-            )
+            self.remaining_space -= bytes;
+
+            ptr::slice_from_raw_parts_mut(result, bytes)
         } else {
             self.allocate_fallback(bytes)
         }
     }
 
     fn remaining_space(&self) -> usize {
-        self.remaining_space_ref
-            .as_ref()
-            .map_or(0, |reference| reference.len())
+        self.remaining_space
     }
 
     fn create_block(bytes: usize) -> Box<[u8]> {
-        Vec::<u8>::with_capacity(bytes).into_boxed_slice()
+        vec![0 as u8; bytes].into_boxed_slice()
     }
 
-    #[inline(always)]
-    fn allocate_new_block(&'pool mut self, bytes: usize) -> &'pool mut [u8] {
-        let block_box = Vec::<u8>::with_capacity(bytes).into_boxed_slice();
-        self.blocks.push(block_box);
-
-        self.blocks.last_mut().unwrap().as_mut()
-    }
-
-    fn allocate_fallback(&'pool mut self, bytes: usize) -> &'pool mut [u8] {
-        if bytes > self.block_size / 4 {
+    fn allocate_fallback(&mut self, bytes: usize) -> *mut [u8] {
+        let head_ptr = if bytes > self.block_size / 4 {
             let block_box = Self::create_block(bytes);
+
             self.blocks.push(block_box);
 
-            self.blocks.last_mut().unwrap().as_mut()
+            self.blocks.last_mut().unwrap().as_mut_ptr()
         } else {
             // allocate a new block and waste remaining space
             let block_box = Self::create_block(self.block_size);
             self.blocks.push(block_box);
 
-            replace_with_and_return(
-                &mut self.remaining_space_ref,
-                || None,
-                |reference| {
-                    let (right, left) = reference.unwrap().split_at_mut(bytes + 1);
+            let result = self.blocks.last_mut().unwrap().as_mut_ptr();
+            let mut remaining_space_ptr = result;
+            remaining_space_ptr = unsafe { remaining_space_ptr.add(bytes) };
 
-                    (right, Some(left))
-                },
-            )
-        }
+            self.remaining_space_ptr = Some(remaining_space_ptr);
+            self.remaining_space = self.block_size - bytes;
+
+            result
+        };
+
+        ptr::slice_from_raw_parts_mut(head_ptr, bytes)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::memory_pool::MemoryPool;
+
+    fn create_test_pool() -> MemoryPool {
+        MemoryPool::new(4096)
+    }
+
+    #[test]
+    fn test_small_space() {
+        let mut pool = create_test_pool();
+
+        let size = 1024;
+
+        let result = pool.allocate(size);
+
+        assert_eq!(result.len(), size);
+    }
+
+    #[test]
+    fn test_big_space() {
+        let mut pool = create_test_pool();
+
+        let size = 1024 * 8;
+
+        let result = pool.allocate(size);
+
+        assert_eq!(result.len(), size);
+    }
+
+    #[test]
+    fn test_big_fallback() {
+        let mut pool = create_test_pool();
+
+        pool.allocate(1024);
+        let left = pool.remaining_space();
+        pool.allocate(1029 * 8); // allocate a new block
+
+        assert_eq!(left, pool.remaining_space());
+    }
+
+    #[test]
+    fn test_small_fallback() {
+        let mut pool = create_test_pool();
+
+        pool.allocate(1024 * 3 + 512);
+        pool.allocate(640);
+
+        assert_eq!(pool.remaining_space, 4096 - 640);
     }
 }

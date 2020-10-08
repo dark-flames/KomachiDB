@@ -1,3 +1,4 @@
+#![feature(slice_ptr_len)]
 mod block;
 mod interface;
 mod memory_pool;
