@@ -75,10 +75,13 @@ impl<K: Key> SkipListIterator<K> {
 }
 
 impl<'a, K: Key> Iterator for SkipListIterator<K> {
-    type Item = *const [u8];
+    type Item = (K, *const [u8]);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let result = self.visitor.peek_as_ref().map(|node| node.ptr).flatten();
+        let result = self
+            .visitor
+            .peek_as_ref()
+            .map(|node| (node.key.unwrap(), node.ptr.unwrap()));
 
         self.visitor.next();
 
