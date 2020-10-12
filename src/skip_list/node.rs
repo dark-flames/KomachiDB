@@ -1,57 +1,61 @@
-use crate::block::Block;
 use crate::interface::Key;
 use std::cmp::Ordering;
 
 #[allow(dead_code)]
-pub struct Node<'pool, K: Key> {
-    pub block: Option<&'pool Block<'pool, K>>,
-    pub next: Vec<*mut Node<'pool, K>>,
+#[derive(Debug)]
+pub struct Node<K: Key> {
+    pub ptr: Option<*const [u8]>,
+    pub key: Option<K>,
+    pub next: Vec<*mut Node<K>>,
 }
 
 #[allow(dead_code)]
-impl<'pool, K: Key> Node<'pool, K> {
-    pub fn new(block: &'pool Block<'pool, K>) -> Node<'pool, K> {
+impl<K: Key> Node<K> {
+    pub fn new(key: K, ptr: *const [u8]) -> Node<K> {
         Node {
-            block: Some(block),
+            key: Some(key),
+            ptr: Some(ptr),
             next: vec![],
         }
     }
 
-    pub fn head() -> Node<'pool, K> {
+    pub fn head() -> Node<K> {
         Node {
-            block: None,
+            key: None,
+            ptr: None,
             next: vec![],
         }
     }
 
     pub fn is_head(&self) -> bool {
-        self.block.is_none()
+        self.key.is_none()
     }
 
-    pub fn add_level(&mut self, next: *mut Node<'pool, K>) {
+    pub fn add_level(&mut self, next: *mut Node<K>) {
         self.next.push(next)
     }
 
     pub fn compare_key(&self, key: &K) -> Ordering {
-        self.block
-            .map_or(Ordering::Less, |block| block.key.partial_cmp(key).unwrap())
+        self.key.map_or(Ordering::Less, |self_key| {
+            self_key.partial_cmp(key).unwrap()
+        })
     }
 }
 
-impl<'pool, K: Key> PartialEq for Node<'pool, K> {
+impl<'pool, K: Key> PartialEq for Node<K> {
     fn eq(&self, other: &Self) -> bool {
-        match (self.block, other.block) {
-            (Some(self_block), Some(other_block)) => self_block.key == other_block.key,
+        match (&self.key, &other.key) {
+            (Some(self_key), Some(other_key)) => self_key == other_key,
             (None, None) => true,
             _ => false,
         }
     }
 }
 
-impl<'pool, K: Key> PartialOrd for Node<'pool, K> {
+impl<K: Key> PartialOrd for Node<K> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self.block, other.block) {
-            (Some(self_block), Some(other_block)) => self_block.key.partial_cmp(other_block.key),
+        match (&self.key, &other.key) {
+            (Some(self_key), Some(other_key)) => self_key.partial_cmp(other_key),
             (None, Some(_)) => Some(Ordering::Less),
             (Some(_), None) => Some(Ordering::Greater),
             (None, None) => Some(Ordering::Equal),

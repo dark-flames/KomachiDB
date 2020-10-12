@@ -120,7 +120,7 @@ mod test {
         let mut pool = create_test_pool();
 
         pool.allocate(1024 * 3 + 512);
-        pool.allocate(640);
+        pool.allocate(640); // waste left space
 
         assert_eq!(pool.remaining_space, 4096 - 640);
     }
