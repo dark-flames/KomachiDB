@@ -26,7 +26,7 @@ impl<K: Key> SkipList<K> {
         }
     }
 
-    pub fn insert(&mut self, key: K, ptr: *const [u8]) {
+    pub fn insert(&mut self, key: *const K, ptr: *const [u8]) {
         let node_box = Box::new(Node::new(key, ptr));
 
         let level = self.level_generator.generate_level();
@@ -155,9 +155,9 @@ mod test {
 
         let mut skip_list = create_skip_list();
 
-        skip_list.insert(3, pool.allocate(4));
-        skip_list.insert(2, pool.allocate(4));
-        skip_list.insert(1, pool.allocate(4));
+        skip_list.insert(Box::into_raw(Box::new(3)), pool.allocate(4));
+        skip_list.insert(Box::into_raw(Box::new(2)), pool.allocate(4));
+        skip_list.insert(Box::into_raw(Box::new(1)), pool.allocate(4));
 
         assert!(skip_list.seek(&1).is_some());
         assert!(skip_list.seek(&2).is_some());
@@ -181,7 +181,7 @@ mod test {
                 }
             };
 
-            skip_list.insert(key, pool.allocate(4));
+            skip_list.insert(Box::into_raw(Box::new(key)), pool.allocate(4));
             set.insert(key);
         }
 

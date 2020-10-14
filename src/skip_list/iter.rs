@@ -64,24 +64,24 @@ impl<K: Key> Into<SkipListIterator<K>> for SkipListVisitor<K> {
     }
 }
 
-pub struct SkipListIterator<K: Key> {
+pub struct SkipListIterator<K: Key + 'static> {
     visitor: SkipListVisitor<K>,
 }
 
-impl<K: Key> SkipListIterator<K> {
+impl<K: Key + 'static> SkipListIterator<K> {
     pub fn new(visitor: SkipListVisitor<K>) -> SkipListIterator<K> {
         SkipListIterator { visitor }
     }
 }
 
-impl<'a, K: Key> Iterator for SkipListIterator<K> {
+impl<K: Key + 'static> Iterator for SkipListIterator<K> {
     type Item = (K, *const [u8]);
 
     fn next(&mut self) -> Option<Self::Item> {
         let result = self
             .visitor
             .peek_as_ref()
-            .map(|node| (node.key.unwrap(), node.ptr.unwrap()));
+            .map(|node| (*node.key_ref().unwrap(), node.ptr.unwrap()));
 
         self.visitor.next();
 

@@ -5,13 +5,13 @@ use std::cmp::Ordering;
 #[derive(Debug)]
 pub struct Node<K: Key> {
     pub ptr: Option<*const [u8]>,
-    pub key: Option<K>,
+    pub key: Option<*const K>,
     pub next: Vec<*mut Node<K>>,
 }
 
 #[allow(dead_code)]
 impl<K: Key> Node<K> {
-    pub fn new(key: K, ptr: *const [u8]) -> Node<K> {
+    pub fn new(key: *const K, ptr: *const [u8]) -> Node<K> {
         Node {
             key: Some(key),
             ptr: Some(ptr),
@@ -36,13 +36,17 @@ impl<K: Key> Node<K> {
     }
 
     pub fn compare_key(&self, key: &K) -> Ordering {
-        self.key.map_or(Ordering::Less, |self_key| {
+        self.key_ref().map_or(Ordering::Less, |self_key| {
             self_key.partial_cmp(key).unwrap()
         })
     }
+
+    pub fn key_ref(&self) -> Option<&K> {
+        unsafe { self.key.map(|ptr| ptr.as_ref()).flatten() }
+    }
 }
 
-impl<'pool, K: Key> PartialEq for Node<K> {
+impl<K: Key> PartialEq for Node<K> {
     fn eq(&self, other: &Self) -> bool {
         match (&self.key, &other.key) {
             (Some(self_key), Some(other_key)) => self_key == other_key,
@@ -54,7 +58,7 @@ impl<'pool, K: Key> PartialEq for Node<K> {
 
 impl<K: Key> PartialOrd for Node<K> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (&self.key, &other.key) {
+        match (self.key_ref(), other.key_ref()) {
             (Some(self_key), Some(other_key)) => self_key.partial_cmp(other_key),
             (None, Some(_)) => Some(Ordering::Less),
             (Some(_), None) => Some(Ordering::Greater),
