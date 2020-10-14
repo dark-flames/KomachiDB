@@ -1,5 +1,3 @@
-use std::ptr;
-
 #[allow(dead_code)]
 pub struct MemoryPool {
     blocks: Vec<Box<[u8]>>,
@@ -24,7 +22,7 @@ impl MemoryPool {
         self.memory_usage
     }
 
-    pub fn allocate(&mut self, bytes: usize) -> *mut [u8] {
+    pub fn allocate(&mut self, bytes: usize) -> *mut u8 {
         self.memory_usage += bytes;
 
         if bytes < self.remaining_space() {
@@ -34,7 +32,7 @@ impl MemoryPool {
 
             self.remaining_space -= bytes;
 
-            ptr::slice_from_raw_parts_mut(result, bytes)
+            result
         } else {
             self.allocate_fallback(bytes)
         }
@@ -48,8 +46,8 @@ impl MemoryPool {
         vec![0 as u8; bytes].into_boxed_slice()
     }
 
-    fn allocate_fallback(&mut self, bytes: usize) -> *mut [u8] {
-        let head_ptr = if bytes > self.block_size / 4 {
+    fn allocate_fallback(&mut self, bytes: usize) -> *mut u8 {
+        if bytes > self.block_size / 4 {
             let block_box = Self::create_block(bytes);
 
             self.blocks.push(block_box);
@@ -68,9 +66,7 @@ impl MemoryPool {
             self.remaining_space = self.block_size - bytes;
 
             result
-        };
-
-        ptr::slice_from_raw_parts_mut(head_ptr, bytes)
+        }
     }
 }
 
@@ -80,28 +76,6 @@ mod test {
 
     fn create_test_pool() -> MemoryPool {
         MemoryPool::new(4096)
-    }
-
-    #[test]
-    fn test_small_space() {
-        let mut pool = create_test_pool();
-
-        let size = 1024;
-
-        let result = pool.allocate(size);
-
-        assert_eq!(result.len(), size);
-    }
-
-    #[test]
-    fn test_big_space() {
-        let mut pool = create_test_pool();
-
-        let size = 1024 * 8;
-
-        let result = pool.allocate(size);
-
-        assert_eq!(result.len(), size);
     }
 
     #[test]

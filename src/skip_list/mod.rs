@@ -26,7 +26,7 @@ impl<K: Key> SkipList<K> {
         }
     }
 
-    pub fn insert(&mut self, key: *const K, ptr: *const [u8]) {
+    pub fn insert(&mut self, key: *const K, ptr: *const u8) {
         let node_box = Box::new(Node::new(key, ptr));
 
         let level = self.level_generator.generate_level();
@@ -57,7 +57,7 @@ impl<K: Key> SkipList<K> {
         self.size += 1;
     }
 
-    pub fn seek(&self, key: &K) -> Option<*const [u8]> {
+    pub fn seek(&self, key: &K) -> Option<*const u8> {
         let mut iter = self.visitor();
 
         loop {

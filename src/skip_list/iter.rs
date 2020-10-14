@@ -75,7 +75,7 @@ impl<K: Key + 'static> SkipListIterator<K> {
 }
 
 impl<K: Key + 'static> Iterator for SkipListIterator<K> {
-    type Item = (K, *const [u8]);
+    type Item = (K, *const u8);
 
     fn next(&mut self) -> Option<Self::Item> {
         let result = self

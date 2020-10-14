@@ -4,14 +4,14 @@ use std::cmp::Ordering;
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct Node<K: Key> {
-    pub ptr: Option<*const [u8]>,
+    pub ptr: Option<*const u8>,
     pub key: Option<*const K>,
     pub next: Vec<*mut Node<K>>,
 }
 
 #[allow(dead_code)]
 impl<K: Key> Node<K> {
-    pub fn new(key: *const K, ptr: *const [u8]) -> Node<K> {
+    pub fn new(key: *const K, ptr: *const u8) -> Node<K> {
         Node {
             key: Some(key),
             ptr: Some(ptr),
