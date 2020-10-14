@@ -1,7 +1,9 @@
-use crate::format::{SequenceNumber, ValueType};
 use crate::interface::Key;
 use crate::memory_pool::MemoryPool;
 use crate::skip_list::SkipList;
+use format::{SequenceNumber, ValueType};
+
+mod format;
 
 #[allow(dead_code)]
 pub struct MemTable<K: Key> {

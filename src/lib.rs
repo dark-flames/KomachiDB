@@ -1,7 +1,6 @@
 #![feature(slice_ptr_len)]
 #[macro_use]
 mod error;
-mod format;
 mod implement;
 mod interface;
 mod memory_pool;
