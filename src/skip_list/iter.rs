@@ -1,25 +1,25 @@
-use crate::interface::Key;
+use crate::comparator::Comparator;
 use crate::skip_list::node::Node;
 
-pub struct SkipListVisitor<K: Key> {
-    current: Option<*mut Node<K>>,
+pub struct SkipListVisitor<C: Comparator> {
+    current: Option<*mut Node<C>>,
     current_level: usize,
 }
 
 #[allow(dead_code)]
-impl<K: Key> SkipListVisitor<K> {
-    pub fn new(entry: *mut Node<K>, max_level: usize) -> SkipListVisitor<K> {
+impl<C: Comparator> SkipListVisitor<C> {
+    pub fn new(entry: *mut Node<C>, max_level: usize) -> SkipListVisitor<C> {
         SkipListVisitor {
             current: Some(entry),
             current_level: max_level,
         }
     }
 
-    pub fn current_as_ref(&self) -> Option<&Node<K>> {
+    pub fn current_as_ref(&self) -> Option<&Node<C>> {
         unsafe { self.current().map(|ptr| &*ptr) }
     }
 
-    pub fn current(&self) -> Option<*mut Node<K>> {
+    pub fn current(&self) -> Option<*mut Node<C>> {
         self.current
     }
 
@@ -27,17 +27,17 @@ impl<K: Key> SkipListVisitor<K> {
         self.current_level
     }
 
-    pub fn peek(&self) -> Option<*mut Node<K>> {
+    pub fn peek(&self) -> Option<*mut Node<C>> {
         self.current
             .map(|ptr| unsafe { (*ptr).next.get(self.current_level).copied() })
             .flatten()
     }
 
-    pub fn peek_as_ref(&self) -> Option<&Node<K>> {
+    pub fn peek_as_ref(&self) -> Option<&Node<C>> {
         unsafe { self.peek().map(|ptr| &*ptr) }
     }
 
-    pub fn next(&mut self) -> Option<*mut Node<K>> {
+    pub fn next(&mut self) -> Option<*mut Node<C>> {
         let result = self.peek();
 
         if let Some(next_node) = result {
@@ -56,32 +56,32 @@ impl<K: Key> SkipListVisitor<K> {
     }
 }
 
-impl<K: Key> Into<SkipListIterator<K>> for SkipListVisitor<K> {
-    fn into(mut self) -> SkipListIterator<K> {
+impl<C: Comparator> Into<SkipListIterator<C>> for SkipListVisitor<C> {
+    fn into(mut self) -> SkipListIterator<C> {
         self.current_level = 0;
 
         SkipListIterator::new(self)
     }
 }
 
-pub struct SkipListIterator<K: Key + 'static> {
-    visitor: SkipListVisitor<K>,
+pub struct SkipListIterator<C: Comparator> {
+    visitor: SkipListVisitor<C>,
 }
 
-impl<K: Key + 'static> SkipListIterator<K> {
-    pub fn new(visitor: SkipListVisitor<K>) -> SkipListIterator<K> {
+impl<C: Comparator> SkipListIterator<C> {
+    pub fn new(visitor: SkipListVisitor<C>) -> SkipListIterator<C> {
         SkipListIterator { visitor }
     }
 }
 
-impl<K: Key + 'static> Iterator for SkipListIterator<K> {
-    type Item = (K, *const u8);
+impl<C: Comparator> Iterator for SkipListIterator<C> {
+    type Item = (*const [u8], *const u8);
 
     fn next(&mut self) -> Option<Self::Item> {
         let result = self
             .visitor
             .peek_as_ref()
-            .map(|node| (*node.key_ref().unwrap(), node.ptr.unwrap()));
+            .map(|node| (node.key.unwrap(), node.ptr.unwrap()));
 
         self.visitor.next();
 

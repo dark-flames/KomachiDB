@@ -1,29 +1,33 @@
-use crate::interface::Key;
+use crate::comparator::Comparator;
 use std::cmp::Ordering;
+use std::ptr::null;
 
 #[allow(dead_code)]
 #[derive(Debug)]
-pub struct Node<K: Key> {
+pub struct Node<C: Comparator> {
     pub ptr: Option<*const u8>,
-    pub key: Option<*const K>,
-    pub next: Vec<*mut Node<K>>,
+    pub key: Option<*const [u8]>,
+    pub next: Vec<*mut Node<C>>,
+    marker: *const C,
 }
 
 #[allow(dead_code)]
-impl<K: Key> Node<K> {
-    pub fn new(key: *const K, ptr: *const u8) -> Node<K> {
+impl<C: Comparator> Node<C> {
+    pub fn new(key: *const [u8], ptr: *const u8) -> Node<C> {
         Node {
             key: Some(key),
             ptr: Some(ptr),
             next: vec![],
+            marker: null(),
         }
     }
 
-    pub fn head() -> Node<K> {
+    pub fn head() -> Node<C> {
         Node {
             key: None,
             ptr: None,
             next: vec![],
+            marker: null(),
         }
     }
 
@@ -31,35 +35,36 @@ impl<K: Key> Node<K> {
         self.key.is_none()
     }
 
-    pub fn add_level(&mut self, next: *mut Node<K>) {
+    pub fn add_level(&mut self, next: *mut Node<C>) {
         self.next.push(next)
     }
 
-    pub fn compare_key(&self, key: &K) -> Ordering {
-        self.key_ref().map_or(Ordering::Less, |self_key| {
-            self_key.partial_cmp(key).unwrap()
-        })
+    pub fn compare_key(&self, key: &[u8]) -> Ordering {
+        self.key_ref()
+            .map_or(Ordering::Less, |key_ref| C::compare(key_ref, key))
     }
 
-    pub fn key_ref(&self) -> Option<&K> {
-        unsafe { self.key.map(|ptr| ptr.as_ref()).flatten() }
+    pub fn key_ref(&self) -> Option<&[u8]> {
+        self.key
+            .map(|key_ptr| unsafe { key_ptr.as_ref() })
+            .flatten()
     }
 }
 
-impl<K: Key> PartialEq for Node<K> {
+impl<C: Comparator> PartialEq for Node<C> {
     fn eq(&self, other: &Self) -> bool {
-        match (&self.key, &other.key) {
-            (Some(self_key), Some(other_key)) => self_key == other_key,
+        match (self.key_ref(), other.key_ref()) {
+            (Some(self_key), Some(other_key)) => C::compare(self_key, other_key) == Ordering::Equal,
             (None, None) => true,
             _ => false,
         }
     }
 }
 
-impl<K: Key> PartialOrd for Node<K> {
+impl<C: Comparator> PartialOrd for Node<C> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self.key_ref(), other.key_ref()) {
-            (Some(self_key), Some(other_key)) => self_key.partial_cmp(other_key),
+            (Some(self_key), Some(other_key)) => Some(C::compare(self_key, other_key)),
             (None, Some(_)) => Some(Ordering::Less),
             (Some(_), None) => Some(Ordering::Greater),
             (None, None) => Some(Ordering::Equal),

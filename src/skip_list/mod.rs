@@ -1,4 +1,4 @@
-use crate::interface::Key;
+use crate::comparator::Comparator;
 use crate::skip_list::iter::{SkipListIterator, SkipListVisitor};
 use crate::skip_list::level_generator::LevelGenerator;
 use crate::skip_list::node::Node;
@@ -9,15 +9,15 @@ mod level_generator;
 mod node;
 
 #[allow(dead_code)]
-pub struct SkipList<K: Key> {
-    entry: *mut Node<K>,
+pub struct SkipList<C: Comparator> {
+    entry: *mut Node<C>,
     size: usize,
     level_generator: Box<dyn LevelGenerator>,
 }
 
 #[allow(dead_code)]
-impl<K: Key> SkipList<K> {
-    pub fn new(level_generator: Box<dyn LevelGenerator>) -> SkipList<K> {
+impl<C: Comparator> SkipList<C> {
+    pub fn new(level_generator: Box<dyn LevelGenerator>) -> SkipList<C> {
         let head = Box::new(Node::head());
         SkipList {
             entry: Box::into_raw(head),
@@ -26,7 +26,7 @@ impl<K: Key> SkipList<K> {
         }
     }
 
-    pub fn insert(&mut self, key: *const K, ptr: *const u8) {
+    pub fn insert(&mut self, key: *const [u8], ptr: *const u8) {
         let node_box = Box::new(Node::new(key, ptr));
 
         let level = self.level_generator.generate_level();
@@ -57,7 +57,7 @@ impl<K: Key> SkipList<K> {
         self.size += 1;
     }
 
-    pub fn seek(&self, key: &K) -> Option<*const u8> {
+    pub fn seek(&self, key: &[u8]) -> Option<*const u8> {
         let mut iter = self.visitor();
 
         loop {
@@ -84,11 +84,11 @@ impl<K: Key> SkipList<K> {
         }
     }
 
-    pub fn iter(&self) -> SkipListIterator<K> {
+    pub fn iter(&self) -> SkipListIterator<C> {
         self.visitor().into()
     }
 
-    fn find_position(&mut self, node: &Node<K>) -> Vec<*mut Node<K>> {
+    fn find_position(&mut self, node: &Node<C>) -> Vec<*mut Node<C>> {
         let mut prev = vec![];
         let mut iter = self.visitor();
 
@@ -126,20 +126,23 @@ impl<K: Key> SkipList<K> {
         }
     }
 
-    fn visitor(&self) -> SkipListVisitor<K> {
+    fn visitor(&self) -> SkipListVisitor<C> {
         SkipListVisitor::new(self.entry, self.max_level())
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::implement::NumberComparator;
     use crate::memory_pool::MemoryPool;
     use crate::skip_list::level_generator::RandomLevelGenerator;
     use crate::skip_list::SkipList;
     use rand::random;
     use std::collections::HashSet;
+    use std::mem::size_of;
+    use std::ptr::slice_from_raw_parts;
 
-    fn create_skip_list() -> SkipList<u32> {
+    fn create_skip_list() -> SkipList<NumberComparator<u32>> {
         let level_generator = RandomLevelGenerator::new(10, 0.5);
 
         return SkipList::new(Box::new(level_generator));
@@ -149,20 +152,28 @@ mod test {
         MemoryPool::new(4096)
     }
 
+    fn get_number_ptr(n: u32) -> *const [u8] {
+        slice_from_raw_parts(Box::into_raw(Box::new(n)) as *const u8, size_of::<u32>())
+    }
+
+    fn get_number_slice(n: u32) -> &'static [u8] {
+        unsafe { get_number_ptr(n).as_ref().unwrap() }
+    }
+
     #[test]
     fn simple_test_insert() {
         let mut pool = create_pool();
 
         let mut skip_list = create_skip_list();
 
-        skip_list.insert(Box::into_raw(Box::new(3)), pool.allocate(4));
-        skip_list.insert(Box::into_raw(Box::new(2)), pool.allocate(4));
-        skip_list.insert(Box::into_raw(Box::new(1)), pool.allocate(4));
+        skip_list.insert(get_number_ptr(3), pool.allocate(4));
+        skip_list.insert(get_number_ptr(2), pool.allocate(4));
+        skip_list.insert(get_number_ptr(1), pool.allocate(4));
 
-        assert!(skip_list.seek(&1).is_some());
-        assert!(skip_list.seek(&2).is_some());
-        assert!(skip_list.seek(&3).is_some());
-        assert!(skip_list.seek(&4).is_none());
+        assert!(skip_list.seek(get_number_slice(1)).is_some());
+        assert!(skip_list.seek(get_number_slice(2)).is_some());
+        assert!(skip_list.seek(get_number_slice(3)).is_some());
+        assert!(skip_list.seek(get_number_slice(4)).is_none());
     }
 
     #[test]
@@ -181,7 +192,7 @@ mod test {
                 }
             };
 
-            skip_list.insert(Box::into_raw(Box::new(key)), pool.allocate(4));
+            skip_list.insert(get_number_ptr(key), pool.allocate(4));
             set.insert(key);
         }
 
@@ -189,7 +200,10 @@ mod test {
         set_vec.sort();
         assert_eq!(
             set_vec,
-            skip_list.iter().map(|(key, _)| key).collect::<Vec<_>>()
+            skip_list
+                .iter()
+                .map(|(key, _)| unsafe { *(key.as_ptr() as *const u32) })
+                .collect::<Vec<_>>()
         );
 
         for _ in 0..100 {
@@ -201,7 +215,7 @@ mod test {
                 }
             };
 
-            assert!(skip_list.seek(&key).is_none());
+            assert!(skip_list.seek(get_number_slice(key)).is_none());
         }
     }
 }
