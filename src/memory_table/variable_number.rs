@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 pub fn encode_usize(mut num: usize) -> Box<[u8]> {
     let mut slice = vec![];
     while num >= (1 << 7) {
@@ -10,6 +11,7 @@ pub fn encode_usize(mut num: usize) -> Box<[u8]> {
     Vec::into_boxed_slice(slice)
 }
 
+#[allow(dead_code)]
 pub fn decode_usize(ptr: *const u8) -> (usize, *const u8) {
     let mut current_ptr = ptr;
     let mut slice = vec![];

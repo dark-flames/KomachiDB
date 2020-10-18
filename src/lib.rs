@@ -3,9 +3,7 @@
 
 #[macro_use]
 mod error;
-mod comparator;
 mod implement;
-mod memory_pool;
 mod memory_table;
 mod skip_list;
 

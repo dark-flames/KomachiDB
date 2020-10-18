@@ -1,73 +1,72 @@
-use crate::comparator::Comparator;
-use std::cmp::Ordering;
-use std::ptr::null;
+use crate::skip_list::arena::Arena;
+use crate::skip_list::MAX_HEIGHT;
+use bytes::Bytes;
+use std::intrinsics::write_bytes;
+use std::mem::size_of;
+use std::ptr::write;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 #[allow(dead_code)]
 #[derive(Debug)]
-pub struct Node<C: Comparator> {
-    pub ptr: Option<*const u8>,
-    pub key: Option<*const [u8]>,
-    pub next: Vec<*mut Node<C>>,
-    marker: *const C,
+#[repr(C)]
+pub struct Node {
+    key: Bytes,
+    value: Bytes,
+    height: usize,
+    next: [AtomicU32; MAX_HEIGHT],
 }
 
 #[allow(dead_code)]
-impl<C: Comparator> Node<C> {
-    pub fn new(key: *const [u8], ptr: *const u8) -> Node<C> {
-        Node {
-            key: Some(key),
-            ptr: Some(ptr),
-            next: vec![],
-            marker: null(),
+impl Node {
+    pub fn allocate_with_arena(
+        key: Bytes,
+        value: Bytes,
+        height: usize,
+        arena: &mut Arena<Node>,
+    ) -> u32 {
+        let size = size_of::<Self>() - (MAX_HEIGHT - 1 - height) * size_of::<u32>();
+
+        unsafe {
+            let offset = arena.allocate(size as u32);
+            let ptr = arena.get_mut(offset);
+            let node = ptr.as_mut().unwrap();
+
+            write(&mut node.key, key);
+            write(&mut node.value, value);
+            write(&mut node.height, height);
+            write_bytes(node.next.as_mut_ptr(), 0, height + 1);
+
+            offset
         }
     }
 
-    pub fn head() -> Node<C> {
-        Node {
-            key: None,
-            ptr: None,
-            next: vec![],
-            marker: null(),
+    pub fn next_offset(&self, level: usize) -> u32 {
+        if level <= self.height {
+            self.next[level].load(Ordering::SeqCst)
+        } else {
+            0
         }
+    }
+
+    pub fn set_next(&mut self, level: usize, offset: u32) {
+        assert!(level <= self.height);
+
+        self.next[level].store(offset, Ordering::SeqCst)
     }
 
     pub fn is_head(&self) -> bool {
-        self.key.is_none()
+        self.key.is_empty() && self.value.is_empty()
     }
 
-    pub fn add_level(&mut self, next: *mut Node<C>) {
-        self.next.push(next)
+    pub fn key(&self) -> &Bytes {
+        &self.key
     }
 
-    pub fn compare_key(&self, key: &[u8]) -> Ordering {
-        self.key_ref()
-            .map_or(Ordering::Less, |key_ref| C::compare(key_ref, key))
+    pub fn value(&self) -> &Bytes {
+        &self.value
     }
 
-    pub fn key_ref(&self) -> Option<&[u8]> {
-        self.key
-            .map(|key_ptr| unsafe { key_ptr.as_ref() })
-            .flatten()
-    }
-}
-
-impl<C: Comparator> PartialEq for Node<C> {
-    fn eq(&self, other: &Self) -> bool {
-        match (self.key_ref(), other.key_ref()) {
-            (Some(self_key), Some(other_key)) => C::compare(self_key, other_key) == Ordering::Equal,
-            (None, None) => true,
-            _ => false,
-        }
-    }
-}
-
-impl<C: Comparator> PartialOrd for Node<C> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self.key_ref(), other.key_ref()) {
-            (Some(self_key), Some(other_key)) => Some(C::compare(self_key, other_key)),
-            (None, Some(_)) => Some(Ordering::Less),
-            (Some(_), None) => Some(Ordering::Greater),
-            (None, None) => Some(Ordering::Equal),
-        }
+    pub fn height(&self) -> usize {
+        self.height
     }
 }

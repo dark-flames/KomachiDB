@@ -1,6 +1,5 @@
 use thiserror::Error;
 
-#[warn(dead_code)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Sequence number overflow")]
