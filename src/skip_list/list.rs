@@ -176,16 +176,13 @@ mod test {
         skip_list.insert(get_bytes(6), get_bytes(6));
         skip_list.insert(get_bytes(1), get_bytes(1));
 
-        let mut result_vec = vec![];
-        let mut visitor = skip_list.visitor();
-        while visitor.current_level() != 0 {
-            visitor.reduce_level()
-        }
-        while visitor.peek_ref().is_some() {
-            result_vec.push(get_num(visitor.peek_ref().unwrap().key()));
-            visitor.next();
-        }
-        assert_eq!(vec![1, 3, 5, 6], result_vec);
+        assert_eq!(
+            vec![1, 3, 5, 6],
+            skip_list
+                .iter()
+                .map(|(key, _)| get_num(key))
+                .collect::<Vec<u32>>()
+        );
     }
 
     #[test]
