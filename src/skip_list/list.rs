@@ -1,6 +1,6 @@
 use crate::skip_list::arena::Arena;
 use crate::skip_list::comparator::Comparator;
-use crate::skip_list::iter::SkipListVisitor;
+use crate::skip_list::iter::{SkipListIterator, SkipListVisitor};
 use crate::skip_list::level_generator::LevelGenerator;
 use crate::skip_list::node::Node;
 use bytes::Bytes;
@@ -77,6 +77,10 @@ impl<C: Comparator> SkipList<C> {
 
     pub fn len(&self) -> usize {
         self.len.load(AtomicOrdering::SeqCst)
+    }
+
+    pub fn iter(&self) -> SkipListIterator<C> {
+        self.visitor().into()
     }
 
     fn visitor(&self) -> SkipListVisitor<C> {
@@ -205,16 +209,13 @@ mod test {
 
         let mut set_vec = set.iter().map(|key| key.clone()).collect::<Vec<u32>>();
         set_vec.sort();
-        let mut result_vec = vec![];
-        let mut visitor = skip_list.visitor();
-        while visitor.current_level() != 0 {
-            visitor.reduce_level()
-        }
-        while visitor.peek_ref().is_some() {
-            result_vec.push(get_num(visitor.peek_ref().unwrap().key()));
-            visitor.next();
-        }
-        assert_eq!(set_vec, result_vec);
+        assert_eq!(
+            set_vec,
+            skip_list
+                .iter()
+                .map(|(key, _)| get_num(key))
+                .collect::<Vec<u32>>()
+        );
 
         for key in set_vec {
             assert!(skip_list.seek(&get_bytes(key)).is_some());

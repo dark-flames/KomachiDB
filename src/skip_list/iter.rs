@@ -40,7 +40,7 @@ impl<'a, C: Comparator> SkipListVisitor<'a, C> {
         }
     }
 
-    pub fn peek_ref(&self) -> Option<&Node> {
+    pub fn peek_ref(&self) -> Option<&'a Node> {
         self.peek_offset()
             .map(|offset| unsafe { &*self.arena_ref.get(offset) })
     }
@@ -76,5 +76,31 @@ impl<'a, C: Comparator> SkipListVisitor<'a, C> {
         } else {
             Ordering::Greater
         }
+    }
+}
+
+pub struct SkipListIterator<'a, C: Comparator> {
+    visitor: SkipListVisitor<'a, C>,
+}
+
+impl<'a, C: Comparator> From<SkipListVisitor<'a, C>> for SkipListIterator<'a, C> {
+    fn from(mut visitor: SkipListVisitor<'a, C>) -> Self {
+        while visitor.current_level() != 0 {
+            visitor.reduce_level()
+        }
+
+        SkipListIterator { visitor }
+    }
+}
+
+impl<'a, C: Comparator> Iterator for SkipListIterator<'a, C> {
+    type Item = (&'a Bytes, &'a Bytes);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let node_option = self.visitor.peek_ref();
+
+        self.visitor.next();
+
+        node_option.map(|node| (node.key(), node.value()))
     }
 }
