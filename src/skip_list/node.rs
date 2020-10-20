@@ -58,12 +58,20 @@ impl Node {
         self.key.is_empty() && self.value.is_empty()
     }
 
-    pub fn key(&self) -> &Bytes {
-        &self.key
+    pub fn key(&self) -> Option<&Bytes> {
+        if !self.is_head() {
+            Some(&self.key)
+        } else {
+            None
+        }
     }
 
-    pub fn value(&self) -> &Bytes {
-        &self.value
+    pub fn value(&self) -> Option<&Bytes> {
+        if !self.is_head() {
+            Some(&self.value)
+        } else {
+            None
+        }
     }
 
     pub fn height(&self) -> usize {

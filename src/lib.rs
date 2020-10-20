@@ -4,8 +4,8 @@
 #[macro_use]
 mod error;
 mod implement;
-mod memory_table;
-mod skip_list;
+mod memtable;
+pub mod skip_list;
 
 #[cfg(test)]
 mod tests {
