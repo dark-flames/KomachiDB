@@ -36,6 +36,10 @@ impl<'a, C: Comparator> SkipListInternalVisitor<'a, C> {
         };
     }
 
+    pub fn set_level(&mut self, level: usize) {
+        self.level = level
+    }
+
     pub fn set_zero_level(&mut self) {
         self.level = 0;
     }

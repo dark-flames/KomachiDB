@@ -22,7 +22,7 @@ impl Node {
         key: Bytes,
         value: Bytes,
         height: usize,
-        arena: &mut Arena<Node>,
+        arena: &Arena<Node>,
     ) -> u32 {
         let size = size_of::<Self>() - (MAX_HEIGHT - 1 - height) * size_of::<u32>();
 
@@ -52,6 +52,12 @@ impl Node {
         assert!(level <= self.height);
 
         self.next[level].store(offset, Ordering::SeqCst)
+    }
+
+    pub fn get_next_atomic(&mut self, level: usize) -> &mut AtomicU32 {
+        assert!(level <= self.height);
+
+        &mut self.next[level]
     }
 
     pub fn is_head(&self) -> bool {

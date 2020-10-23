@@ -29,7 +29,7 @@ impl<T> Arena<T> {
         self.vec.capacity()
     }
 
-    pub fn allocate(&mut self, size: u32) -> u32 {
+    pub fn allocate(&self, size: u32) -> u32 {
         let size_mod = size & (self.align - 1);
         let slop = if size_mod == 0 {
             0
@@ -75,3 +75,5 @@ impl<T> Arena<T> {
         }
     }
 }
+
+unsafe impl<T> Send for Arena<T> {}

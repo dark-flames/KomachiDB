@@ -1,6 +1,6 @@
 use rand::random;
 
-pub trait LevelGenerator {
+pub trait LevelGenerator: Send {
     fn max_level(&self) -> usize;
 
     fn generate_level(&self) -> usize;
@@ -37,3 +37,5 @@ impl LevelGenerator for RandomLevelGenerator {
         level
     }
 }
+
+unsafe impl Send for RandomLevelGenerator {}
