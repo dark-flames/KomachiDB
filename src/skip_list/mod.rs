@@ -9,4 +9,4 @@ pub use comparator::{Comparator, NumberComparator};
 pub use level_generator::{LevelGenerator, RandomLevelGenerator};
 pub use list::SkipList;
 
-const MAX_HEIGHT: usize = 10;
+const MAX_HEIGHT: usize = 20;
