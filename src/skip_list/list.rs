@@ -47,19 +47,6 @@ impl<C: Comparator> SkipList<C> {
 
     pub fn insert(&self, key: Bytes, value: Bytes) {
         let mut prev_next = self.find_position(&key);
-        /*
-        let key_num = unsafe { *(key.as_ptr() as *const u32) };
-        let get_offset_key_num = |offset: u32| unsafe {
-            if offset == 0 {
-                return "Tail".to_string();
-            }
-            let key_ref = &*self.arena.get(offset);
-            match key_ref.key() {
-                Some(bytes) => (*(bytes.as_ptr() as *const u32) as i32).to_string(),
-                _ => "H".to_string(),
-            }
-        };
-         */
 
         for i in prev_next.iter() {
             // duplicate key
@@ -84,8 +71,6 @@ impl<C: Comparator> SkipList<C> {
 
         let node_offset = Node::allocate_with_arena(key, value, node_level, &self.arena);
 
-        //println!("Start {}", key_num);
-
         let node = unsafe { &mut *self.arena.get_mut(node_offset) };
 
         for (level, (prev_offset, next_offset)) in prev_next.into_iter().enumerate() {
@@ -95,14 +80,7 @@ impl<C: Comparator> SkipList<C> {
                 let prev_node = unsafe { &mut *self.arena.get_mut(prev) };
 
                 node.set_next(level, next);
-                /*
-                println!(
-                    "Set {} next {} at {} init",
-                    key_num,
-                    get_offset_key_num(next),
-                    level
-                );
-                */
+
                 match prev_node.get_next_atomic(level).compare_exchange(
                     next,
                     node_offset,
@@ -110,13 +88,6 @@ impl<C: Comparator> SkipList<C> {
                     AtomicOrdering::SeqCst,
                 ) {
                     Ok(_) => {
-                        /*
-                        println!(
-                            "Set {} next {} at {} CAS",
-                            get_offset_key_num(prev),
-                            key_num,
-                            level
-                        );*/
                         break;
                     }
                     Err(_) => {
@@ -152,7 +123,6 @@ impl<C: Comparator> SkipList<C> {
             }
         }
         self.len.fetch_add(1, AtomicOrdering::SeqCst);
-        //println!("Finish {}", key_num);
     }
 
     pub fn len(&self) -> usize {
@@ -188,22 +158,6 @@ impl<C: Comparator> SkipList<C> {
                 Ordering::Greater => {
                     internal_visitor.reduce_level();
                 }
-            }
-        }
-    }
-
-    pub fn seek_prev_offset(&self, key: &Bytes) -> u32 {
-        let mut level = self.height();
-        let prev = self
-            .arena
-            .get_offset(self.entry.load(AtomicOrdering::SeqCst));
-
-        loop {
-            let (prev, _) = self.find_position_for_level(prev, key, level);
-            level -= 1;
-
-            if level == 0 {
-                break prev;
             }
         }
     }
@@ -249,15 +203,15 @@ impl<C: Comparator> SkipList<C> {
         visitor.set_level(level);
 
         loop {
-            match visitor.compare_next_key(key) {
-                Ordering::Less => {
+            match visitor.compare_and_get_next_offset(key) {
+                (Ordering::Less, _) => {
                     visitor.next();
                 }
-                Ordering::Equal => {
-                    break (visitor.peek_offset(), visitor.peek_offset());
+                (Ordering::Equal, offset) => {
+                    break (offset, offset);
                 }
-                _ => {
-                    break (visitor.current_offset(), visitor.peek_offset());
+                (_, offset) => {
+                    break (visitor.current_offset(), offset);
                 }
             }
         }

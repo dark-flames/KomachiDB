@@ -80,8 +80,7 @@ fn random_test_insert() {
 fn test_concurrent() {
     let skip_list = Arc::new(create_skip_list(19));
 
-    // todo: may have some race condition
-    let data = generate_data(1000);
+    let data = generate_data(100000);
 
     let mut set_vec = data
         .iter()
@@ -89,7 +88,7 @@ fn test_concurrent() {
         .collect::<Vec<u32>>();
     set_vec.sort();
 
-    let pool = threadpool::ThreadPool::new(100);
+    let pool = threadpool::ThreadPool::new(72);
 
     for (key, data) in data.clone() {
         let r = skip_list.clone();
@@ -112,19 +111,6 @@ fn test_concurrent() {
 
     for key in set_vec.iter() {
         visitor.seek(&get_bytes(key.clone()));
-        assert!(visitor.valid());
-    }
-
-    for _ in 0..100 {
-        let key = loop {
-            let result = random::<u32>();
-
-            if !set_vec.contains(&result) {
-                break result;
-            }
-        };
-
-        visitor.seek(&get_bytes(key));
         assert!(visitor.valid());
     }
 }

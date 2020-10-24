@@ -130,6 +130,45 @@ impl<'a, C: Comparator> SkipListInternalVisitor<'a, C> {
             Ordering::Greater
         }
     }
+
+    pub fn compare_and_get_next_offset(&self, key: &Bytes) -> (Ordering, u32) {
+        let next_offset = self.peek_offset();
+        if next_offset != 0 {
+            let next = unsafe { &*self.arena_ref.get(next_offset) };
+            (
+                C::compare(next.key().unwrap().as_ref(), key.as_ref()),
+                next_offset,
+            )
+        } else {
+            (Ordering::Greater, 0)
+        }
+    }
+
+    pub fn seek(&mut self, key: &Bytes) {
+        let offset = loop {
+            match self.compare_and_get_next_offset(key) {
+                (Ordering::Less, offset) => {
+                    let level = self.current_level();
+                    if offset != 0 {
+                        self.set_offset(offset);
+                        self.set_level(level)
+                    }
+                }
+                (Ordering::Equal, offset) => {
+                    break offset;
+                }
+                (Ordering::Greater, _) if self.current_level() == 0 => {
+                    break 0;
+                }
+                (Ordering::Greater, _) => {
+                    self.reduce_level();
+                }
+            }
+        };
+
+        self.set_offset(offset);
+        self.set_zero_level();
+    }
 }
 
 pub struct SkipListIterator<'a, C: Comparator> {
@@ -172,6 +211,7 @@ pub struct SkipListVisitor<'a, C: Comparator> {
     internal_visitor: SkipListInternalVisitor<'a, C>,
 }
 
+#[allow(dead_code)]
 impl<'a, C: Comparator> SkipListVisitor<'a, C> {
     pub fn new(
         skip_list: &'a SkipList<C>,
@@ -196,13 +236,7 @@ impl<'a, C: Comparator> SkipListVisitor<'a, C> {
     }
 
     pub fn seek(&mut self, key: &Bytes) {
-        let offset = self.skip_list.seek_offset(key);
-        self.set_offset(offset)
-    }
-
-    pub fn seek_prev(&mut self, key: &Bytes) {
-        let offset = self.skip_list.seek_prev_offset(key);
-        self.set_offset(offset)
+        self.internal_visitor.seek(key);
     }
 
     pub fn valid(&self) -> bool {
