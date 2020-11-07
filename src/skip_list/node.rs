@@ -18,17 +18,12 @@ pub struct Node {
 
 #[allow(dead_code)]
 impl Node {
-    pub fn allocate_with_arena(
-        key: Bytes,
-        value: Bytes,
-        height: usize,
-        arena: &Arena<Node>,
-    ) -> u32 {
+    pub fn allocate_with_arena(key: Bytes, value: Bytes, height: usize, arena: &Arena) -> u32 {
         let size = size_of::<Self>() - (MAX_HEIGHT - 1 - height) * size_of::<u32>();
 
         unsafe {
             let offset = arena.allocate(size as u32);
-            let ptr = arena.get_mut(offset);
+            let ptr = arena.get_mut_node(offset);
             let node = ptr.as_mut().unwrap();
 
             write(&mut node.key, key);

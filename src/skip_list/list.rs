@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicPtr, Ordering as AtomicOrdering};
 
 pub struct SkipList<C: Comparator> {
     entry: AtomicPtr<Node>,
-    arena: Arena<Node>,
+    arena: Arena,
     len: AtomicUsize,
     level_generator: Box<dyn LevelGenerator>,
     height: AtomicUsize,
@@ -33,7 +33,7 @@ impl<C: Comparator> SkipList<C> {
             &arena,
         );
 
-        let entry = unsafe { arena.get_mut(entry_node) };
+        let entry = unsafe { arena.get_mut_node(entry_node) };
 
         SkipList {
             entry: AtomicPtr::new(entry),
@@ -71,13 +71,13 @@ impl<C: Comparator> SkipList<C> {
 
         let node_offset = Node::allocate_with_arena(key, value, node_level, &self.arena);
 
-        let node = unsafe { &mut *self.arena.get_mut(node_offset) };
+        let node = unsafe { &mut *self.arena.get_mut_node(node_offset) };
 
         for (level, (prev_offset, next_offset)) in prev_next.into_iter().enumerate() {
             let mut prev = prev_offset;
             let mut next = next_offset;
             loop {
-                let prev_node = unsafe { &mut *self.arena.get_mut(prev) };
+                let prev_node = unsafe { &mut *self.arena.get_mut_node(prev) };
 
                 node.set_next(level, next);
 

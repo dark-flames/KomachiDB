@@ -1,27 +1,25 @@
-use std::marker::PhantomData;
+use crate::skip_list::node::Node;
 use std::mem::align_of;
 use std::ptr::{null, null_mut};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 #[allow(dead_code)]
-pub struct Arena<T: Sized> {
+pub struct Arena {
     vec: Vec<u8>,
     ptr: *mut u8,
     internal_offset: AtomicU32,
     align: u32,
-    _marker: PhantomData<T>,
 }
 
-impl<T> Arena<T> {
-    pub fn with_capacity(size: u32) -> Arena<T> {
+impl Arena {
+    pub fn with_capacity(size: u32) -> Arena {
         let mut vec = Vec::with_capacity(size as usize);
         let ptr = vec.as_mut_ptr();
         Arena {
             vec,
             ptr,
             internal_offset: AtomicU32::new(0),
-            align: align_of::<T>() as u32,
-            _marker: Default::default(),
+            align: align_of::<Node>() as u32,
         }
     }
 
@@ -46,25 +44,25 @@ impl<T> Arena<T> {
         offset + 1
     }
 
-    pub unsafe fn get_mut(&self, offset: u32) -> *mut T {
+    pub unsafe fn get_mut_node(&self, offset: u32) -> *mut Node {
         if offset == 0 {
             null_mut()
         } else {
             let internal_offset = offset - 1;
-            self.ptr.clone().add(internal_offset as usize) as *mut T
+            self.ptr.clone().add(internal_offset as usize) as *mut Node
         }
     }
 
-    pub unsafe fn get(&self, offset: u32) -> *const T {
+    pub unsafe fn get_node(&self, offset: u32) -> *const Node {
         if offset == 0 {
             null()
         } else {
             let internal_offset = offset - 1;
-            self.ptr.clone().add(internal_offset as usize) as *const T
+            self.ptr.clone().add(internal_offset as usize) as *const Node
         }
     }
 
-    pub fn get_offset(&self, ptr: *const T) -> u32 {
+    pub fn get_offset(&self, ptr: *const Node) -> u32 {
         let head_addr = self.ptr as usize;
         let addr = ptr as usize;
 
@@ -76,4 +74,4 @@ impl<T> Arena<T> {
     }
 }
 
-unsafe impl<T> Send for Arena<T> {}
+unsafe impl Send for Arena {}

@@ -9,7 +9,7 @@ use std::ptr::NonNull;
 
 #[derive(Clone)]
 pub struct SkipListInternalVisitor<'a, C: Comparator> {
-    arena_ref: &'a Arena<Node>,
+    arena_ref: &'a Arena,
     current: NonNull<Node>,
     level: usize,
     valid: bool,
@@ -17,7 +17,7 @@ pub struct SkipListInternalVisitor<'a, C: Comparator> {
 }
 
 impl<'a, C: Comparator> SkipListInternalVisitor<'a, C> {
-    pub fn create(entry: NonNull<Node>, level: usize, arena_ref: &'a Arena<Node>) -> Self {
+    pub fn create(entry: NonNull<Node>, level: usize, arena_ref: &'a Arena) -> Self {
         SkipListInternalVisitor {
             arena_ref,
             current: entry,
@@ -29,7 +29,7 @@ impl<'a, C: Comparator> SkipListInternalVisitor<'a, C> {
 
     pub fn set_offset(&mut self, offset: u32) {
         if offset != 0 {
-            self.current = unsafe { NonNull::new_unchecked(self.arena_ref.get_mut(offset)) };
+            self.current = unsafe { NonNull::new_unchecked(self.arena_ref.get_mut_node(offset)) };
             self.level = self.current_ref().unwrap().height();
         } else {
             self.valid = true;
@@ -82,14 +82,14 @@ impl<'a, C: Comparator> SkipListInternalVisitor<'a, C> {
     pub fn peek_ref(&self) -> Option<&'a Node> {
         match self.peek_offset() {
             0 => None,
-            offset => Some(unsafe { &*self.arena_ref.get(offset) }),
+            offset => Some(unsafe { &*self.arena_ref.get_node(offset) }),
         }
     }
 
     pub fn next(&mut self) -> u32 {
         let offset = self.peek_offset();
         if offset != 0 {
-            self.current = unsafe { NonNull::new_unchecked(self.arena_ref.get_mut(offset)) };
+            self.current = unsafe { NonNull::new_unchecked(self.arena_ref.get_mut_node(offset)) };
         } else {
             self.valid = false;
         };
@@ -134,7 +134,7 @@ impl<'a, C: Comparator> SkipListInternalVisitor<'a, C> {
     pub fn compare_and_get_next_offset(&self, key: &Bytes) -> (Ordering, u32) {
         let next_offset = self.peek_offset();
         if next_offset != 0 {
-            let next = unsafe { &*self.arena_ref.get(next_offset) };
+            let next = unsafe { &*self.arena_ref.get_node(next_offset) };
             (
                 C::compare(next.key().unwrap().as_ref(), key.as_ref()),
                 next_offset,
