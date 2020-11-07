@@ -1,35 +1,20 @@
 use super::{NumberComparator, RandomLevelGenerator, SkipList};
-use bytes::Bytes;
+use crate::Data;
 use rand::seq::SliceRandom;
 use rand::{random, thread_rng};
-use std::mem::size_of;
-use std::ptr::slice_from_raw_parts;
 use std::sync::Arc;
 
 fn create_skip_list(max_level: usize) -> SkipList<NumberComparator<u32>> {
     let level_generator = RandomLevelGenerator::new(max_level, 0.5);
 
-    SkipList::new(1024 * 1024 * 1024 * 3, Box::new(level_generator))
+    SkipList::new(Box::new(level_generator), 4096)
 }
 
-pub fn get_bytes(n: u32) -> Bytes {
-    let ptr = Box::into_raw(Box::new(n)) as *const u8;
-    Bytes::copy_from_slice(unsafe {
-        slice_from_raw_parts(ptr, size_of::<u32>())
-            .as_ref()
-            .unwrap()
-    })
-}
-
-pub fn get_num(bytes: &Bytes) -> u32 {
-    unsafe { *(bytes.as_ref().as_ptr() as *const u32) }
-}
-
-pub fn generate_data(size: usize) -> Vec<(u32, Bytes)> {
+pub fn generate_data(size: usize) -> Vec<(u32, u32)> {
     let mut data: Vec<u32> = (0 as u32..size as u32).collect();
     let mut rng = thread_rng();
     data.shuffle(&mut rng);
-    data.into_iter().map(|k| (k, Bytes::new())).collect()
+    data.into_iter().map(|k| (k, k)).collect()
 }
 
 #[test]
@@ -44,21 +29,21 @@ fn random_test_insert() {
     set_vec.sort();
 
     for (key, data) in data {
-        skip_list.insert(get_bytes(key), data);
+        skip_list.insert(key, data);
     }
 
     assert_eq!(
         set_vec,
         skip_list
             .iter()
-            .map(|(key, _)| get_num(key))
+            .map(|(key, _)| u32::from_ref(key).clone())
             .collect::<Vec<u32>>()
     );
 
     let mut visitor = skip_list.visitor();
 
     for key in set_vec.iter() {
-        visitor.seek(&get_bytes(key.clone()));
+        visitor.seek(key);
         assert!(visitor.valid());
     }
 
@@ -71,8 +56,8 @@ fn random_test_insert() {
             }
         };
 
-        visitor.seek(&get_bytes(key));
-        assert!(visitor.valid());
+        visitor.seek(&key);
+        assert!(!visitor.valid());
     }
 }
 
@@ -93,7 +78,7 @@ fn test_concurrent() {
     for (key, data) in data.clone() {
         let r = skip_list.clone();
         pool.execute(move || {
-            r.insert(get_bytes(key), data);
+            r.insert(key, data);
         });
     }
 
@@ -103,14 +88,14 @@ fn test_concurrent() {
         set_vec,
         skip_list
             .iter()
-            .map(|(key, _)| get_num(key))
+            .map(|(key, _)| u32::from_ref(key).clone())
             .collect::<Vec<u32>>()
     );
 
     let mut visitor = skip_list.visitor();
 
     for key in set_vec.iter() {
-        visitor.seek(&get_bytes(key.clone()));
+        visitor.seek(key);
         assert!(visitor.valid());
     }
 }

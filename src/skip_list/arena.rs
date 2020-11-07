@@ -1,77 +1,80 @@
 use crate::skip_list::node::Node;
+use std::cell::UnsafeCell;
 use std::mem::align_of;
-use std::ptr::{null, null_mut};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::ptr::null_mut;
+use std::sync::RwLock;
+
+struct ArenaCore {
+    blocks: Vec<Box<[u8]>>,
+    current_block: usize,
+    current_block_remaining: usize,
+    memory_usage: usize,
+    ptr: *mut u8,
+}
 
 #[allow(dead_code)]
 pub struct Arena {
-    vec: Vec<u8>,
-    ptr: *mut u8,
-    internal_offset: AtomicU32,
-    align: u32,
-}
-
-impl Arena {
-    pub fn with_capacity(size: u32) -> Arena {
-        let mut vec = Vec::with_capacity(size as usize);
-        let ptr = vec.as_mut_ptr();
-        Arena {
-            vec,
-            ptr,
-            internal_offset: AtomicU32::new(0),
-            align: align_of::<Node>() as u32,
-        }
-    }
-
-    pub fn capacity(&self) -> usize {
-        self.vec.capacity()
-    }
-
-    pub fn allocate(&self, size: u32) -> u32 {
-        let size_mod = size & (self.align - 1);
-        let slop = if size_mod == 0 {
-            0
-        } else {
-            self.align - size_mod
-        };
-
-        let need = size + slop;
-
-        let offset = self.internal_offset.fetch_add(need, Ordering::SeqCst);
-
-        assert!(offset + need <= self.capacity() as u32);
-
-        offset + 1
-    }
-
-    pub unsafe fn get_mut_node(&self, offset: u32) -> *mut Node {
-        if offset == 0 {
-            null_mut()
-        } else {
-            let internal_offset = offset - 1;
-            self.ptr.clone().add(internal_offset as usize) as *mut Node
-        }
-    }
-
-    pub unsafe fn get_node(&self, offset: u32) -> *const Node {
-        if offset == 0 {
-            null()
-        } else {
-            let internal_offset = offset - 1;
-            self.ptr.clone().add(internal_offset as usize) as *const Node
-        }
-    }
-
-    pub fn get_offset(&self, ptr: *const Node) -> u32 {
-        let head_addr = self.ptr as usize;
-        let addr = ptr as usize;
-
-        if (head_addr <= addr) && (addr < head_addr + self.capacity()) {
-            (addr - head_addr) as u32 + 1
-        } else {
-            0
-        }
-    }
+    core: RwLock<UnsafeCell<ArenaCore>>,
+    align: usize,
+    block_size: usize,
 }
 
 unsafe impl Send for Arena {}
+
+#[allow(dead_code)]
+impl Arena {
+    pub fn new(block_size: usize) -> Arena {
+        Arena {
+            core: RwLock::new(UnsafeCell::new(ArenaCore {
+                blocks: vec![],
+                current_block: 0,
+                current_block_remaining: 0,
+                memory_usage: 0,
+                ptr: null_mut(),
+            })),
+            align: align_of::<Node>(),
+            block_size,
+        }
+    }
+
+    fn create_block(size: usize) -> Box<[u8]> {
+        vec![0 as u8; size].into_boxed_slice()
+    }
+
+    pub fn memory_usage(&self) -> usize {
+        unsafe { self.core.read().unwrap().get().as_ref().unwrap() }.memory_usage
+    }
+
+    pub fn allocate(&self, size: usize) -> *mut u8 {
+        let core_cell = self.core.write().unwrap();
+        let core = unsafe { core_cell.get().as_mut().unwrap() };
+
+        core.memory_usage += size;
+
+        if size <= core.current_block_remaining {
+            let result = core.ptr;
+            core.ptr = unsafe { core.ptr.add(size) };
+            core.current_block_remaining -= size;
+
+            result
+        } else if size > self.block_size / 4 {
+            let block = Self::create_block(size);
+
+            core.blocks.push(block);
+
+            core.blocks.last_mut().unwrap().as_mut_ptr()
+        } else {
+            let block = Self::create_block(self.block_size);
+
+            core.blocks.push(block);
+
+            let result = core.blocks.last_mut().unwrap().as_mut_ptr();
+
+            core.ptr = unsafe { result.clone().add(size) };
+            core.current_block = core.blocks.len() - 1;
+            core.current_block_remaining = self.block_size - size;
+
+            result
+        }
+    }
+}

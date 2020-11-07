@@ -3,10 +3,10 @@ use crate::skip_list::comparator::Comparator;
 use crate::skip_list::iter::{SkipListInternalVisitor, SkipListIterator, SkipListVisitor};
 use crate::skip_list::level_generator::LevelGenerator;
 use crate::skip_list::node::Node;
-use bytes::Bytes;
+use crate::Data;
 use std::cmp::Ordering;
 use std::marker::PhantomData;
-use std::ptr::NonNull;
+use std::ptr::{null_mut, NonNull};
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::{AtomicPtr, Ordering as AtomicOrdering};
 
@@ -23,17 +23,10 @@ unsafe impl<C: Comparator> Sync for SkipList<C> {}
 
 #[allow(dead_code)]
 impl<C: Comparator> SkipList<C> {
-    pub fn new(arena_capacity: u32, level_generator: Box<dyn LevelGenerator>) -> SkipList<C> {
-        let arena = Arena::with_capacity(arena_capacity);
+    pub fn new(level_generator: Box<dyn LevelGenerator>, block_size: usize) -> SkipList<C> {
+        let arena = Arena::new(block_size);
 
-        let entry_node = Node::allocate_with_arena(
-            Bytes::new(),
-            Bytes::new(),
-            level_generator.max_level(),
-            &arena,
-        );
-
-        let entry = unsafe { arena.get_mut_node(entry_node) };
+        let entry = Node::head(level_generator.max_level(), &arena);
 
         SkipList {
             entry: AtomicPtr::new(entry),
@@ -45,8 +38,8 @@ impl<C: Comparator> SkipList<C> {
         }
     }
 
-    pub fn insert(&self, key: Bytes, value: Bytes) {
-        let mut prev_next = self.find_position(&key);
+    pub fn insert(&self, key: impl Data, value: impl Data) {
+        let mut prev_next = self.find_position(key.as_ref());
 
         for i in prev_next.iter() {
             // duplicate key
@@ -61,29 +54,25 @@ impl<C: Comparator> SkipList<C> {
             prev_next.pop();
         }
 
-        let entry_offset = self
-            .arena
-            .get_offset(self.entry.load(AtomicOrdering::SeqCst));
+        let entry = self.entry.load(AtomicOrdering::SeqCst);
 
         while prev_next.len() < node_level + 1 {
-            prev_next.push((entry_offset, 0));
+            prev_next.push((entry, null_mut()));
         }
 
-        let node_offset = Node::allocate_with_arena(key, value, node_level, &self.arena);
+        let node_ptr = Node::allocate_with_arena(key, value, node_level, &self.arena);
 
-        let node = unsafe { &mut *self.arena.get_mut_node(node_offset) };
+        let node = unsafe { node_ptr.as_mut().unwrap() };
 
-        for (level, (prev_offset, next_offset)) in prev_next.into_iter().enumerate() {
-            let mut prev = prev_offset;
-            let mut next = next_offset;
+        for (level, (mut prev, mut next)) in prev_next.into_iter().enumerate() {
             loop {
-                let prev_node = unsafe { &mut *self.arena.get_mut_node(prev) };
+                let prev_node = unsafe { prev.as_mut().unwrap() };
 
                 node.set_next(level, next);
 
                 match prev_node.get_next_atomic(level).compare_exchange(
                     next,
-                    node_offset,
+                    node_ptr,
                     AtomicOrdering::SeqCst,
                     AtomicOrdering::SeqCst,
                 ) {
@@ -141,41 +130,18 @@ impl<C: Comparator> SkipList<C> {
         SkipListVisitor::new(self, self.internal_visitor())
     }
 
-    pub fn seek_offset(&self, key: &Bytes) -> u32 {
-        let mut internal_visitor = self.internal_visitor();
-
-        loop {
-            match internal_visitor.compare_next_key(key) {
-                Ordering::Less => {
-                    internal_visitor.next();
-                }
-                Ordering::Equal => {
-                    break internal_visitor.peek_offset();
-                }
-                Ordering::Greater if internal_visitor.current_level() == 0 => {
-                    break 0;
-                }
-                Ordering::Greater => {
-                    internal_visitor.reduce_level();
-                }
-            }
-        }
-    }
-
     fn internal_visitor(&self) -> SkipListInternalVisitor<C> {
         SkipListInternalVisitor::create(
             unsafe { NonNull::new_unchecked(self.entry.load(AtomicOrdering::SeqCst)) },
             self.height(),
-            &self.arena,
+            self,
         )
     }
 
-    fn find_position(&self, key: &Bytes) -> Vec<(u32, u32)> {
+    fn find_position(&self, key: &[u8]) -> Vec<(*mut Node, *mut Node)> {
         let mut level = self.height();
         let mut result = vec![];
-        let mut prev = self
-            .arena
-            .get_offset(self.entry.load(AtomicOrdering::SeqCst));
+        let mut prev = self.entry.load(AtomicOrdering::SeqCst);
 
         loop {
             let item = self.find_position_for_level(prev, key, level);
@@ -195,23 +161,31 @@ impl<C: Comparator> SkipList<C> {
         result
     }
 
-    fn find_position_for_level(&self, start_offset: u32, key: &Bytes, level: usize) -> (u32, u32) {
+    fn find_position_for_level(
+        &self,
+        start: *mut Node,
+        key: &[u8],
+        level: usize,
+    ) -> (*mut Node, *mut Node) {
         let mut visitor = self.internal_visitor();
-        visitor.set_offset(start_offset);
+        visitor.set_current(start);
         assert!(visitor.current_ref().unwrap().height() >= level);
 
         visitor.set_level(level);
 
         loop {
-            match visitor.compare_and_get_next_offset(key) {
+            match visitor.compare_and_get_next(key) {
                 (Ordering::Less, _) => {
                     visitor.next();
                 }
-                (Ordering::Equal, offset) => {
-                    break (offset, offset);
+                (Ordering::Equal, next) => {
+                    break (next.unwrap(), next.unwrap());
                 }
-                (_, offset) => {
-                    break (visitor.current_offset(), offset);
+                (_, next) => {
+                    break (
+                        visitor.current_ptr().unwrap().as_ptr(),
+                        next.unwrap_or(null_mut()),
+                    );
                 }
             }
         }

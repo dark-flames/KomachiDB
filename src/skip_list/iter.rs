@@ -1,15 +1,15 @@
-use crate::skip_list::arena::Arena;
 use crate::skip_list::comparator::Comparator;
 use crate::skip_list::node::Node;
 use crate::skip_list::SkipList;
+use crate::Data;
 use bytes::Bytes;
 use std::cmp::{max, Ordering};
 use std::marker::PhantomData;
-use std::ptr::NonNull;
+use std::ptr::{null_mut, NonNull};
 
 #[derive(Clone)]
 pub struct SkipListInternalVisitor<'a, C: Comparator> {
-    arena_ref: &'a Arena,
+    skip_list: &'a SkipList<C>,
     current: NonNull<Node>,
     level: usize,
     valid: bool,
@@ -18,9 +18,9 @@ pub struct SkipListInternalVisitor<'a, C: Comparator> {
 
 #[allow(dead_code)]
 impl<'a, C: Comparator> SkipListInternalVisitor<'a, C> {
-    pub fn create(entry: NonNull<Node>, level: usize, arena_ref: &'a Arena) -> Self {
+    pub fn create(entry: NonNull<Node>, level: usize, list: &'a SkipList<C>) -> Self {
         SkipListInternalVisitor {
-            arena_ref,
+            skip_list: list,
             current: entry,
             level,
             valid: true,
@@ -28,12 +28,15 @@ impl<'a, C: Comparator> SkipListInternalVisitor<'a, C> {
         }
     }
 
-    pub fn set_offset(&mut self, offset: u32) {
-        if offset != 0 {
-            self.current = unsafe { NonNull::new_unchecked(self.arena_ref.get_mut_node(offset)) };
-            self.level = self.current_ref().unwrap().height();
-        } else {
-            self.valid = true;
+    pub fn set_current(&mut self, current: *mut Node) {
+        match NonNull::new(current) {
+            Some(ptr) => {
+                self.current = ptr;
+                self.level = self.current_ref().unwrap().height();
+            }
+            _ => {
+                self.valid = false;
+            }
         };
     }
 
@@ -55,47 +58,45 @@ impl<'a, C: Comparator> SkipListInternalVisitor<'a, C> {
         self.valid
     }
 
-    pub fn current_offset(&self) -> u32 {
+    pub fn current_ptr(&self) -> Option<NonNull<Node>> {
         if self.valid {
-            self.arena_ref.get_offset(self.current.as_ptr())
-        } else {
-            0
-        }
-    }
-
-    pub fn current_ref(&self) -> Option<&Node> {
-        if self.valid {
-            Some(unsafe { self.current.as_ref() })
+            Some(self.current)
         } else {
             None
         }
     }
 
-    pub fn peek_offset(&self) -> u32 {
-        let offset_option = self.current_ref().map(|node| node.next_offset(self.level));
-
-        match offset_option {
-            Some(offset) if offset != 0 => offset,
-            _ => 0,
-        }
+    pub fn current_ref(&self) -> Option<&'a Node> {
+        self.current_ptr()
+            .map(|ptr| unsafe { ptr.as_ptr().as_ref().unwrap() })
     }
 
-    pub fn peek_ref(&self) -> Option<&'a Node> {
-        match self.peek_offset() {
-            0 => None,
-            offset => Some(unsafe { &*self.arena_ref.get_node(offset) }),
-        }
+    fn peek_ptr(&self) -> Option<*mut Node> {
+        self.current_ref().map(|node| node.next(self.level))
     }
 
-    pub fn next(&mut self) -> u32 {
-        let offset = self.peek_offset();
-        if offset != 0 {
-            self.current = unsafe { NonNull::new_unchecked(self.arena_ref.get_mut_node(offset)) };
-        } else {
-            self.valid = false;
-        };
+    pub fn peek(&self) -> Option<&'a mut Node> {
+        self.peek_ptr().map(|ptr| unsafe { ptr.as_mut() }).flatten()
+    }
 
-        offset
+    pub fn next(&mut self) -> Option<&'a mut Node> {
+        let result = self.peek();
+
+        match self.peek_ptr() {
+            Some(node) => match NonNull::new(node) {
+                Some(ptr) => {
+                    self.current = ptr;
+                }
+                _ => {
+                    self.valid = false;
+                }
+            },
+            _ => {
+                self.valid = false;
+            }
+        }
+
+        result
     }
 
     pub fn current_level(&self) -> usize {
@@ -106,11 +107,11 @@ impl<'a, C: Comparator> SkipListInternalVisitor<'a, C> {
         self.level = max(self.level - 1, 0)
     }
 
-    pub fn key(&self) -> Option<&Bytes> {
-        self.current_ref().map(|node| node.key()).flatten()
+    pub fn key(&self) -> Option<&'a [u8]> {
+        self.current_ref().map(|key| key.key()).flatten()
     }
 
-    pub fn value(&self) -> Option<&Bytes> {
+    pub fn value(&self) -> Option<&'a [u8]> {
         self.current_ref().map(|node| node.value()).flatten()
     }
 
@@ -125,49 +126,43 @@ impl<'a, C: Comparator> SkipListInternalVisitor<'a, C> {
     }
 
     pub fn compare_next_key(&self, key: &Bytes) -> Ordering {
-        if let Some(next) = self.peek_ref() {
+        if let Some(next) = self.peek() {
             C::compare(next.key().unwrap().as_ref(), key.as_ref())
         } else {
             Ordering::Greater
         }
     }
 
-    pub fn compare_and_get_next_offset(&self, key: &Bytes) -> (Ordering, u32) {
-        let next_offset = self.peek_offset();
-        if next_offset != 0 {
-            let next = unsafe { &*self.arena_ref.get_node(next_offset) };
-            (
-                C::compare(next.key().unwrap().as_ref(), key.as_ref()),
-                next_offset,
-            )
-        } else {
-            (Ordering::Greater, 0)
+    pub fn compare_and_get_next(&self, key: &[u8]) -> (Ordering, Option<*mut Node>) {
+        match self.peek() {
+            Some(next) => (C::compare(next.key().unwrap(), key), Some(next)),
+            _ => (Ordering::Greater, None),
         }
     }
 
-    pub fn seek(&mut self, key: &Bytes) {
-        let offset = loop {
-            match self.compare_and_get_next_offset(key) {
-                (Ordering::Less, offset) => {
+    pub fn seek(&mut self, key: &[u8]) {
+        let result = loop {
+            match self.compare_and_get_next(key) {
+                (Ordering::Less, next) => {
                     let level = self.current_level();
-                    if offset != 0 {
-                        self.set_offset(offset);
+                    if let Some(next_ptr) = next {
+                        self.set_current(next_ptr);
                         self.set_level(level)
                     }
                 }
-                (Ordering::Equal, offset) => {
-                    break offset;
+                (Ordering::Equal, next) => {
+                    break next.unwrap();
                 }
                 (Ordering::Greater, _) if self.current_level() == 0 => {
-                    break 0;
+                    break null_mut();
                 }
                 (Ordering::Greater, _) => {
                     self.reduce_level();
                 }
-            }
+            };
         };
 
-        self.set_offset(offset);
+        self.set_current(result);
         self.set_zero_level();
     }
 }
@@ -187,10 +182,10 @@ impl<'a, C: Comparator> From<SkipListInternalVisitor<'a, C>> for SkipListIterato
 }
 
 impl<'a, C: Comparator> Iterator for SkipListIterator<'a, C> {
-    type Item = (&'a Bytes, &'a Bytes);
+    type Item = (&'a [u8], &'a [u8]);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let node_option = self.internal_visitor.peek_ref();
+        let node_option = self.internal_visitor.peek();
 
         self.internal_visitor.next();
 
@@ -223,11 +218,11 @@ impl<'a, C: Comparator> SkipListVisitor<'a, C> {
             internal_visitor,
         }
     }
-    pub fn key(&self) -> Option<&Bytes> {
+    pub fn key(&self) -> Option<&'a [u8]> {
         self.internal_visitor.key()
     }
 
-    pub fn value(&self) -> Option<&Bytes> {
+    pub fn value(&self) -> Option<&'a [u8]> {
         self.internal_visitor.value()
     }
 
@@ -236,16 +231,16 @@ impl<'a, C: Comparator> SkipListVisitor<'a, C> {
         self.internal_visitor.next();
     }
 
-    pub fn seek(&mut self, key: &Bytes) {
-        self.internal_visitor.seek(key);
+    pub fn seek(&mut self, key: &impl Data) {
+        self.internal_visitor.seek(key.as_ref());
     }
 
     pub fn valid(&self) -> bool {
         self.internal_visitor.valid
     }
 
-    fn set_offset(&mut self, offset: u32) {
-        self.internal_visitor.set_offset(offset);
+    fn set_current(&mut self, current: *mut Node) {
+        self.internal_visitor.set_current(current);
         self.internal_visitor.set_zero_level()
     }
 }

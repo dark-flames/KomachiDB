@@ -1,75 +1,126 @@
 use crate::skip_list::arena::Arena;
 use crate::skip_list::MAX_HEIGHT;
-use bytes::Bytes;
-use std::intrinsics::write_bytes;
+use crate::Data;
 use std::mem::size_of;
-use std::ptr::write;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::ptr::write_bytes;
+use std::ptr::{null, null_mut, slice_from_raw_parts, write};
+use std::sync::atomic::{AtomicPtr, Ordering};
 
 #[allow(dead_code)]
 #[derive(Debug)]
 #[repr(C)]
 pub struct Node {
-    key: Bytes,
-    value: Bytes,
+    key: *const u8,
+    value: *const u8,
+    size: usize,
     height: usize,
-    next: [AtomicU32; MAX_HEIGHT],
+    next: [AtomicPtr<Node>; MAX_HEIGHT],
 }
 
 #[allow(dead_code)]
 impl Node {
-    pub fn allocate_with_arena(key: Bytes, value: Bytes, height: usize, arena: &Arena) -> u32 {
-        let size = size_of::<Self>() - (MAX_HEIGHT - 1 - height) * size_of::<u32>();
+    pub fn allocate_with_arena(
+        key: impl Data,
+        value: impl Data,
+        height: usize,
+        arena: &Arena,
+    ) -> *mut Node {
+        let node_size = size_of::<Self>() - (MAX_HEIGHT - 1 - height) * size_of::<u32>();
+        let key_size = key.size();
+        let value_size = value.size();
+        let data_size = key_size + value_size;
 
+        let mut head = arena.allocate(node_size + data_size);
+
+        // write node
         unsafe {
-            let offset = arena.allocate(size as u32);
-            let ptr = arena.get_mut_node(offset);
-            let node = ptr.as_mut().unwrap();
-
-            write(&mut node.key, key);
-            write(&mut node.value, value);
+            let node = (head as *mut Node).as_mut().unwrap();
+            head = head.add(node_size);
+            let key_ptr = head;
+            key.write_to(key_ptr);
+            let value_ptr = head.add(key_size);
+            value.write_to(head);
+            write(&mut node.key, key_ptr);
+            write(&mut node.value, value_ptr);
+            write(&mut node.size, data_size);
             write(&mut node.height, height);
             write_bytes(node.next.as_mut_ptr(), 0, height + 1);
 
-            offset
+            node
         }
     }
 
-    pub fn next_offset(&self, level: usize) -> u32 {
+    pub fn head(height: usize, arena: &Arena) -> *mut Node {
+        let node_size =
+            size_of::<Self>() - (MAX_HEIGHT - 1 - height) * size_of::<AtomicPtr<Node>>();
+
+        let head = arena.allocate(node_size);
+
+        // write node
+        unsafe {
+            let node = (head as *mut Node).as_mut().unwrap();
+
+            write(&mut node.key, null());
+            write(&mut node.value, null());
+            write(&mut node.size, 0);
+            write(&mut node.height, height);
+            write_bytes(node.next.as_mut_ptr(), 0, height + 1);
+
+            node
+        }
+    }
+
+    pub fn next(&self, level: usize) -> *mut Node {
         if level <= self.height {
             self.next[level].load(Ordering::SeqCst)
         } else {
-            0
+            null_mut()
         }
     }
 
-    pub fn set_next(&mut self, level: usize, offset: u32) {
+    pub fn set_next(&mut self, level: usize, node: *mut Node) {
         assert!(level <= self.height);
 
-        self.next[level].store(offset, Ordering::SeqCst)
+        self.next[level].store(node, Ordering::SeqCst)
     }
 
-    pub fn get_next_atomic(&mut self, level: usize) -> &mut AtomicU32 {
+    pub fn get_next_atomic(&mut self, level: usize) -> &AtomicPtr<Node> {
         assert!(level <= self.height);
 
-        &mut self.next[level]
+        &self.next[level]
     }
 
     pub fn is_head(&self) -> bool {
-        self.key.is_empty() && self.value.is_empty()
+        self.key.is_null()
     }
 
-    pub fn key(&self) -> Option<&Bytes> {
+    fn key_size(&self) -> usize {
+        (self.value as usize) - (self.key as usize)
+    }
+
+    fn value_size(&self) -> usize {
+        self.size - self.key_size()
+    }
+
+    pub fn key(&self) -> Option<&[u8]> {
         if !self.is_head() {
-            Some(&self.key)
+            Some(unsafe {
+                slice_from_raw_parts(self.key, self.key_size())
+                    .as_ref()
+                    .unwrap()
+            })
         } else {
             None
         }
     }
 
-    pub fn value(&self) -> Option<&Bytes> {
+    pub fn value(&self) -> Option<&[u8]> {
         if !self.is_head() {
-            Some(&self.value)
+            Some(unsafe {
+                slice_from_raw_parts(self.value, self.value_size())
+                    .as_ref()
+                    .unwrap()
+            })
         } else {
             None
         }
