@@ -1,9 +1,10 @@
 #![feature(slice_ptr_len)]
 #![feature(slice_ptr_get)]
+#![feature(array_methods)]
 
 #[macro_use]
 mod error;
-mod implement;
+mod format;
 mod memtable;
 pub mod skip_list;
 

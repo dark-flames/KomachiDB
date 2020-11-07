@@ -1,5 +1,5 @@
 use crate::assert_as_error;
-use crate::error::Error;
+use crate::error::{Error, Result};
 use std::mem::size_of;
 
 pub type SequenceNumber = u64;
@@ -8,18 +8,18 @@ pub type WrappedValueTag = [u8; 8];
 #[allow(dead_code)]
 pub enum ValueType {
     Value = 0,
-    Deletion = 1,
+    TombStone = 1,
 }
 
 #[allow(dead_code)]
 pub struct ValueTag {
-    sequence_number: SequenceNumber,
-    ty: ValueType,
+    pub sequence_number: SequenceNumber,
+    pub ty: ValueType,
 }
 
 #[allow(dead_code)]
 impl ValueTag {
-    pub fn new(sequence_number: SequenceNumber, ty: ValueType) -> Result<ValueTag, Error> {
+    pub fn new(sequence_number: SequenceNumber, ty: ValueType) -> Result<ValueTag> {
         assert_as_error!(
             sequence_number < (1 << (size_of::<u64>() * 8)),
             Error::SequenceNumberOverflow
@@ -36,7 +36,7 @@ impl Into<WrappedValueTag> for ValueTag {
     fn into(self) -> WrappedValueTag {
         let num = match self.ty {
             ValueType::Value => self.sequence_number & 1 << (size_of::<u64>() - 1),
-            ValueType::Deletion => self.sequence_number | 1 << (size_of::<u64>() - 1),
+            ValueType::TombStone => self.sequence_number | 1 << (size_of::<u64>() - 1),
         };
 
         num.to_be_bytes()
@@ -50,7 +50,7 @@ impl From<WrappedValueTag> for ValueTag {
         let ty = if (num & 1 << (size_of::<u64>() * 8 - 1)) == 0 {
             ValueType::Value
         } else {
-            ValueType::Deletion
+            ValueType::TombStone
         };
 
         ValueTag {

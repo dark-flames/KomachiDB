@@ -80,7 +80,7 @@ fn random_test_insert() {
 fn test_concurrent() {
     let skip_list = Arc::new(create_skip_list(19));
 
-    let data = generate_data(100000);
+    let data = generate_data(1000000);
 
     let mut set_vec = data
         .iter()
