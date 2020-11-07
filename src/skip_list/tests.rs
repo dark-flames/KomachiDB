@@ -1,5 +1,5 @@
+use super::{NumberComparator, RandomLevelGenerator, SkipList};
 use bytes::Bytes;
-use komachi_db::skip_list::{NumberComparator, RandomLevelGenerator, SkipList};
 use rand::seq::SliceRandom;
 use rand::{random, thread_rng};
 use std::mem::size_of;
@@ -9,7 +9,7 @@ use std::sync::Arc;
 fn create_skip_list(max_level: usize) -> SkipList<NumberComparator<u32>> {
     let level_generator = RandomLevelGenerator::new(max_level, 0.5);
 
-    return SkipList::new(1024 * 1024 * 1024 * 3, Box::new(level_generator));
+    SkipList::new(1024 * 1024 * 1024 * 3, Box::new(level_generator))
 }
 
 pub fn get_bytes(n: u32) -> Bytes {

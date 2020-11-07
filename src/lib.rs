@@ -5,8 +5,11 @@
 #[macro_use]
 mod error;
 mod format;
+mod interface;
 mod memtable;
-pub mod skip_list;
+mod skip_list;
+
+pub use interface::*;
 
 #[cfg(test)]
 mod tests {

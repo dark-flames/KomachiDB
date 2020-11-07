@@ -16,6 +16,7 @@ pub struct SkipListInternalVisitor<'a, C: Comparator> {
     _key_comparator: PhantomData<C>,
 }
 
+#[allow(dead_code)]
 impl<'a, C: Comparator> SkipListInternalVisitor<'a, C> {
     pub fn create(entry: NonNull<Node>, level: usize, arena_ref: &'a Arena) -> Self {
         SkipListInternalVisitor {
