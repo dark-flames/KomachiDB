@@ -3,7 +3,7 @@ use crate::skip_list::comparator::Comparator;
 use crate::skip_list::iter::{SkipListInternalVisitor, SkipListIterator, SkipListVisitor};
 use crate::skip_list::level_generator::LevelGenerator;
 use crate::skip_list::node::Node;
-use crate::Data;
+use bytes::Bytes;
 use std::cmp::Ordering;
 use std::marker::PhantomData;
 use std::ptr::{null_mut, NonNull};
@@ -38,7 +38,7 @@ impl<C: Comparator> SkipList<C> {
         }
     }
 
-    pub fn insert(&self, key: impl Data, value: impl Data) {
+    pub fn insert(&self, key: Bytes, value: Bytes) {
         let mut prev_next = self.find_position(key.as_ref());
 
         for i in prev_next.iter() {
@@ -116,6 +116,10 @@ impl<C: Comparator> SkipList<C> {
 
     pub fn len(&self) -> usize {
         self.len.load(AtomicOrdering::SeqCst)
+    }
+
+    pub fn memory_usage(&self) -> usize {
+        self.arena.memory_usage()
     }
 
     pub fn is_empty(&self) -> bool {

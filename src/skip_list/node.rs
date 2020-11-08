@@ -1,6 +1,7 @@
 use crate::skip_list::arena::Arena;
 use crate::skip_list::MAX_HEIGHT;
-use crate::Data;
+use bytes::Bytes;
+use std::intrinsics::copy_nonoverlapping;
 use std::mem::size_of;
 use std::ptr::write_bytes;
 use std::ptr::{null, null_mut, slice_from_raw_parts, write};
@@ -20,14 +21,14 @@ pub struct Node {
 #[allow(dead_code)]
 impl Node {
     pub fn allocate_with_arena(
-        key: impl Data,
-        value: impl Data,
+        key: Bytes,
+        value: Bytes,
         height: usize,
         arena: &Arena,
     ) -> *mut Node {
         let node_size = size_of::<Self>() - (MAX_HEIGHT - 1 - height) * size_of::<u32>();
-        let key_size = key.size();
-        let value_size = value.size();
+        let key_size = key.len();
+        let value_size = value.len();
         let data_size = key_size + value_size;
 
         let mut head = arena.allocate(node_size + data_size);
@@ -37,9 +38,9 @@ impl Node {
             let node = (head as *mut Node).as_mut().unwrap();
             head = head.add(node_size);
             let key_ptr = head;
-            key.write_to(key_ptr);
+            copy_nonoverlapping(key.as_ptr(), key_ptr, key_size);
             let value_ptr = head.add(key_size);
-            value.write_to(head);
+            copy_nonoverlapping(value.as_ptr(), value_ptr, value_size);
             write(&mut node.key, key_ptr);
             write(&mut node.value, value_ptr);
             write(&mut node.size, data_size);

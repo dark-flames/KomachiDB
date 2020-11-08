@@ -6,12 +6,14 @@ pub type SequenceNumber = u64;
 pub type WrappedValueTag = [u8; 8];
 
 #[allow(dead_code)]
+#[derive(Copy, Clone)]
 pub enum ValueType {
     Value = 0,
     TombStone = 1,
 }
 
 #[allow(dead_code)]
+#[derive(Copy, Clone)]
 pub struct ValueTag {
     pub sequence_number: SequenceNumber,
     pub ty: ValueType,

@@ -1,7 +1,6 @@
 use crate::skip_list::comparator::Comparator;
 use crate::skip_list::node::Node;
 use crate::skip_list::SkipList;
-use crate::Data;
 use bytes::Bytes;
 use std::cmp::{max, Ordering};
 use std::marker::PhantomData;
@@ -231,8 +230,8 @@ impl<'a, C: Comparator> SkipListVisitor<'a, C> {
         self.internal_visitor.next();
     }
 
-    pub fn seek(&mut self, key: &impl Data) {
-        self.internal_visitor.seek(key.as_ref());
+    pub fn seek(&mut self, key: &[u8]) {
+        self.internal_visitor.seek(key);
     }
 
     pub fn valid(&self) -> bool {
