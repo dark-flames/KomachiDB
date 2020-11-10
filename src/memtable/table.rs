@@ -1,10 +1,9 @@
 use crate::error::Result;
 use crate::format::{ValueTag, ValueType};
 use crate::memtable::internal_key::{InternalKey, InternalKeyComparator};
-use crate::skip_list::{Comparator, LevelGenerator, SkipList};
+use crate::skip_list::{Comparator, LevelGenerator, SkipList, SkipListIterator};
 use bytes::Bytes;
 use std::cmp::Ordering;
-
 #[allow(dead_code)]
 pub struct MemTableMut<C: Comparator> {
     skip_list: SkipList<InternalKeyComparator<C>>,
@@ -53,5 +52,42 @@ impl<C: Comparator> MemTableMut<C> {
 
     pub fn memory_usage(&self) -> usize {
         self.skip_list.memory_usage()
+    }
+
+    pub fn iter(&self) -> SkipListIterator<InternalKeyComparator<C>> {
+        self.skip_list.iter()
+    }
+
+    pub fn freeze(self) -> MemTable<C> {
+        self.into()
+    }
+}
+
+pub struct MemTable<C: Comparator> {
+    memtable: MemTableMut<C>,
+}
+
+impl<C: Comparator> From<MemTableMut<C>> for MemTable<C> {
+    fn from(memtable: MemTableMut<C>) -> Self {
+        MemTable { memtable }
+    }
+}
+
+#[allow(dead_code)]
+impl<C: Comparator> MemTable<C> {
+    pub fn seek_by_internal_key(&self, key: &InternalKey) -> Option<&[u8]> {
+        self.memtable.seek_by_internal_key(key)
+    }
+
+    pub fn seek_by_key_and_sequence(
+        &self,
+        key: &Bytes,
+        sequence: u64,
+    ) -> Result<Option<(ValueTag, &[u8])>> {
+        self.memtable.seek_by_key_and_sequence(key, sequence)
+    }
+
+    pub fn iter(&self) -> SkipListIterator<InternalKeyComparator<C>> {
+        self.memtable.iter()
     }
 }

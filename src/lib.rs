@@ -4,6 +4,7 @@
 
 #[macro_use]
 mod error;
+mod core;
 mod format;
 mod interface;
 mod memtable;

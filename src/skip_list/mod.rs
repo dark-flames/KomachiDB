@@ -8,6 +8,7 @@ mod node;
 mod tests;
 
 pub use comparator::{Comparator, NumberComparator};
+pub use iter::{SkipListIterator, SkipListVisitor};
 pub use level_generator::{LevelGenerator, RandomLevelGenerator};
 pub use list::SkipList;
 
