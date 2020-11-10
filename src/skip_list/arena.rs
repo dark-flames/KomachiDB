@@ -45,7 +45,14 @@ impl Arena {
         unsafe { self.core.read().unwrap().get().as_ref().unwrap() }.memory_usage
     }
 
-    pub fn allocate(&self, size: usize) -> *mut u8 {
+    pub fn allocate(&self, mut size: usize) -> *mut u8 {
+        let slop = match size % self.align {
+            0 => 0,
+            others => self.align - others,
+        };
+
+        size += slop;
+
         let core_cell = self.core.write().unwrap();
         let core = unsafe { core_cell.get().as_mut().unwrap() };
 
