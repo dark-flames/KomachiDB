@@ -1,6 +1,9 @@
+use crate::error::Result;
+use crate::format::{ValueTag, ValueType};
 use crate::memtable::internal_key::{InternalKey, InternalKeyComparator};
 use crate::skip_list::{Comparator, LevelGenerator, SkipList};
 use bytes::Bytes;
+use std::cmp::Ordering;
 
 #[allow(dead_code)]
 pub struct MemTableMut<C: Comparator> {
@@ -24,6 +27,28 @@ impl<C: Comparator> MemTableMut<C> {
         visitor.seek(key.as_bytes().as_ref());
 
         visitor.value()
+    }
+
+    pub fn seek_by_key_and_sequence(
+        &self,
+        key: &Bytes,
+        sequence: u64,
+    ) -> Result<Option<(ValueTag, &[u8])>> {
+        let mut visitor = self.skip_list.visitor();
+        let search_key = InternalKey::new(key.clone(), ValueTag::new(sequence, ValueType::Value)?);
+
+        visitor.seek_less_or_equal(search_key.as_bytes().as_ref());
+
+        Ok(match visitor.key().map(|k| InternalKey::split(k)) {
+            None => None,
+            Some((tag, result_key)) => {
+                if C::compare(key.as_ref(), result_key) == Ordering::Equal {
+                    visitor.value().map(|v| (tag, v))
+                } else {
+                    None
+                }
+            }
+        })
     }
 
     pub fn memory_usage(&self) -> usize {

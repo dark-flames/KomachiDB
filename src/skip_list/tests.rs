@@ -55,9 +55,8 @@ fn random_test_insert() {
             .collect::<Vec<u32>>()
     );
 
-    let mut visitor = skip_list.visitor();
-
     for key in set_vec.iter() {
+        let mut visitor = skip_list.visitor();
         visitor.seek(get_bytes(key.clone()).as_ref());
         assert!(visitor.valid());
     }
@@ -70,7 +69,7 @@ fn random_test_insert() {
                 break result;
             }
         };
-
+        let mut visitor = skip_list.visitor();
         visitor.seek(get_bytes(key.clone()).as_ref());
         assert!(!visitor.valid());
     }
@@ -107,9 +106,8 @@ fn test_concurrent() {
             .collect::<Vec<u32>>()
     );
 
-    let mut visitor = skip_list.visitor();
-
     for key in set_vec.iter() {
+        let mut visitor = skip_list.visitor();
         visitor.seek(get_bytes(key.clone()).as_ref());
         assert!(visitor.valid());
     }

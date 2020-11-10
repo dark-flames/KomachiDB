@@ -139,7 +139,12 @@ impl<'a, C: Comparator> SkipListInternalVisitor<'a, C> {
         }
     }
 
-    pub fn seek(&mut self, key: &[u8]) {
+    pub fn seek(&mut self, key: &[u8], less_or_equal: bool) {
+        assert!(self
+            .current_ref()
+            .map(|node| node.is_head())
+            .unwrap_or(false));
+
         let result = loop {
             match self.compare_and_get_next(key) {
                 (Ordering::Less, next) => {
@@ -153,7 +158,11 @@ impl<'a, C: Comparator> SkipListInternalVisitor<'a, C> {
                     break next.unwrap();
                 }
                 (Ordering::Greater, _) if self.current_level() == 0 => {
-                    break null_mut();
+                    break if less_or_equal {
+                        self.current.as_ptr()
+                    } else {
+                        null_mut()
+                    }
                 }
                 (Ordering::Greater, _) => {
                     self.reduce_level();
@@ -231,7 +240,11 @@ impl<'a, C: Comparator> SkipListVisitor<'a, C> {
     }
 
     pub fn seek(&mut self, key: &[u8]) {
-        self.internal_visitor.seek(key);
+        self.internal_visitor.seek(key, false);
+    }
+
+    pub fn seek_less_or_equal(&mut self, key: &[u8]) {
+        self.internal_visitor.seek(key, true)
     }
 
     pub fn valid(&self) -> bool {
@@ -240,6 +253,5 @@ impl<'a, C: Comparator> SkipListVisitor<'a, C> {
 
     fn set_current(&mut self, current: *mut Node) {
         self.internal_visitor.set_current(current);
-        self.internal_visitor.set_zero_level()
     }
 }
