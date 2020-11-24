@@ -11,7 +11,7 @@ fn create_skip_list(max_level: usize) -> SkipList<NumberComparator<u32>> {
 
 #[test]
 fn random_test_insert() {
-    let skip_list = create_skip_list(9);
+    let skip_list = create_skip_list(19);
 
     let data = generate_data(0, 100);
     let mut set_vec = data

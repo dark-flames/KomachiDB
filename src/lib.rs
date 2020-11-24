@@ -5,18 +5,14 @@
 #[macro_use]
 mod error;
 mod core;
+mod db;
 mod format;
 mod helper;
 mod interface;
 mod memtable;
+mod session;
 mod skip_list;
 
+pub use db::KomachiDB;
 pub use interface::*;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+pub use session::Session;
