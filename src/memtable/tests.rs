@@ -1,5 +1,5 @@
 use crate::memtable::internal_key::{InternalKey, InternalKeyComparator};
-use crate::memtable::table::MemTable;
+use crate::memtable::table::MemTableMut;
 use crate::skip_list::{Comparator, NumberComparator, RandomLevelGenerator};
 
 use crate::format::{ValueTag, ValueType};
@@ -37,7 +37,8 @@ fn test_internal_key_comparator() {
 
 #[test]
 fn test_concurrent() {
-    let memtable = Arc::new(MemTable::<NumberComparator<u32>>::new(
+    let memtable = Arc::new(MemTableMut::<NumberComparator<u32>>::new(
+        0,
         Box::new(RandomLevelGenerator::new(19, 0.1)),
         4 * 1024,
     ));

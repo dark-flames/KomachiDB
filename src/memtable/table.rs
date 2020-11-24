@@ -5,16 +5,26 @@ use crate::skip_list::{Comparator, LevelGenerator, SkipList, SkipListIterator};
 use bytes::Bytes;
 use std::cmp::Ordering;
 #[allow(dead_code)]
-pub struct MemTable<C: Comparator> {
+pub struct MemTableMut<C: Comparator> {
+    log_number: u64,
     skip_list: SkipList<InternalKeyComparator<C>>,
 }
 
 #[allow(dead_code)]
-impl<C: Comparator> MemTable<C> {
-    pub fn new(level_generator: Box<dyn LevelGenerator>, block_size: usize) -> Self {
-        MemTable {
+impl<C: Comparator> MemTableMut<C> {
+    pub fn new(
+        log_number: u64,
+        level_generator: Box<dyn LevelGenerator>,
+        block_size: usize,
+    ) -> Self {
+        MemTableMut {
+            log_number,
             skip_list: SkipList::new(level_generator, block_size),
         }
+    }
+
+    pub fn log_number(&self) -> u64 {
+        self.log_number
     }
 
     pub fn add(&self, key: InternalKey, value: Bytes) {
@@ -57,6 +67,43 @@ impl<C: Comparator> MemTable<C> {
     pub fn iter(&self) -> SkipListIterator<InternalKeyComparator<C>> {
         self.skip_list.iter()
     }
+
+    pub fn freeze(self) -> MemTable<C> {
+        self.into()
+    }
 }
 
+unsafe impl<C: Comparator> Sync for MemTableMut<C> {}
+
+pub struct MemTable<C: Comparator> {
+    memtable: MemTableMut<C>,
+}
+
+impl<C: Comparator> From<MemTableMut<C>> for MemTable<C> {
+    fn from(memtable: MemTableMut<C>) -> Self {
+        MemTable { memtable }
+    }
+}
+
+#[allow(dead_code)]
+impl<C: Comparator> MemTable<C> {
+    pub fn log_number(&self) -> u64 {
+        self.memtable.log_number()
+    }
+    pub fn seek_by_internal_key(&self, key: &InternalKey) -> Option<&[u8]> {
+        self.memtable.seek_by_internal_key(key)
+    }
+
+    pub fn seek_by_key_and_sequence(
+        &self,
+        key: &Bytes,
+        sequence: u64,
+    ) -> Result<Option<(ValueTag, &[u8])>> {
+        self.memtable.seek_by_key_and_sequence(key, sequence)
+    }
+
+    pub fn iter(&self) -> SkipListIterator<InternalKeyComparator<C>> {
+        self.memtable.iter()
+    }
+}
 unsafe impl<C: Comparator> Sync for MemTable<C> {}
