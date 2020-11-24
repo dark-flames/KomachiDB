@@ -1,9 +1,11 @@
 use crate::error::Result;
 use crate::format::{ValueTag, ValueType};
 use crate::memtable::internal_key::{InternalKey, InternalKeyComparator};
-use crate::skip_list::{Comparator, LevelGenerator, SkipList, SkipListIterator};
+use crate::skip_list::{LevelGenerator, SkipList, SkipListIterator};
+use crate::Comparator;
 use bytes::Bytes;
 use std::cmp::Ordering;
+
 #[allow(dead_code)]
 pub struct MemTableMut<C: Comparator> {
     log_number: u64,

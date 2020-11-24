@@ -1,6 +1,7 @@
 use crate::memtable::internal_key::{InternalKey, InternalKeyComparator};
 use crate::memtable::table::MemTableMut;
-use crate::skip_list::{Comparator, NumberComparator, RandomLevelGenerator};
+use crate::skip_list::RandomLevelGenerator;
+use crate::{Comparator, NumberComparator};
 
 use crate::format::{ValueTag, ValueType};
 use crate::helper::test::*;

@@ -1,5 +1,6 @@
-use super::{NumberComparator, RandomLevelGenerator, SkipList};
+use super::{RandomLevelGenerator, SkipList};
 use crate::helper::test::*;
+use crate::NumberComparator;
 use rand::random;
 use std::sync::Arc;
 

@@ -1,5 +1,6 @@
 use crate::core::DBCore;
 use crate::session::session_handler::Session;
+use crate::Comparator;
 use std::cell::UnsafeCell;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -21,7 +22,7 @@ impl SessionFactory {
         }
     }
 
-    pub fn get_session(&self, core: Arc<DBCore>) -> Session {
+    pub fn get_session<C: Comparator>(&self, core: Arc<DBCore<C>>) -> Session<C> {
         let in_use_cell = self.in_use_sequence.write().unwrap();
         let in_use_set = unsafe { in_use_cell.get().as_mut().unwrap() };
         let sequence = self.sequence.fetch_add(1, Ordering::SeqCst);

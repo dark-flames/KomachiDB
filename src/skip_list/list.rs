@@ -1,8 +1,8 @@
 use crate::skip_list::arena::Arena;
-use crate::skip_list::comparator::Comparator;
 use crate::skip_list::iter::{SkipListInternalVisitor, SkipListIterator, SkipListVisitor};
 use crate::skip_list::level_generator::LevelGenerator;
 use crate::skip_list::node::Node;
+use crate::Comparator;
 use bytes::Bytes;
 use std::cmp::Ordering;
 use std::marker::PhantomData;

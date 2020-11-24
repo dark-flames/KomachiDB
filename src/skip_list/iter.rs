@@ -1,6 +1,6 @@
-use crate::skip_list::comparator::Comparator;
 use crate::skip_list::node::Node;
 use crate::skip_list::SkipList;
+use crate::Comparator;
 use bytes::Bytes;
 use std::cmp::{max, Ordering};
 use std::marker::PhantomData;

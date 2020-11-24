@@ -16,3 +16,4 @@ mod skip_list;
 pub use db::KomachiDB;
 pub use interface::*;
 pub use session::Session;
+pub use skip_list::LevelGenerator;

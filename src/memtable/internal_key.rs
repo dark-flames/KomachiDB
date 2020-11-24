@@ -1,5 +1,5 @@
 use crate::format::{ValueTag, WrappedValueTag};
-use crate::skip_list::Comparator;
+use crate::Comparator;
 use bytes::{Bytes, BytesMut};
 use std::cmp::Ordering;
 use std::marker::PhantomData;
