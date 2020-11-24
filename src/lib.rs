@@ -6,6 +6,7 @@
 mod error;
 mod core;
 mod format;
+mod helper;
 mod interface;
 mod memtable;
 mod skip_list;
