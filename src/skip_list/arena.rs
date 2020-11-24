@@ -1,5 +1,4 @@
 use crate::skip_list::node::Node;
-use std::cell::UnsafeCell;
 use std::mem::align_of;
 use std::ptr::null_mut;
 use std::sync::RwLock;
@@ -14,7 +13,7 @@ struct ArenaCore {
 
 #[allow(dead_code)]
 pub struct Arena {
-    core: RwLock<UnsafeCell<ArenaCore>>,
+    core: RwLock<ArenaCore>,
     align: usize,
     block_size: usize,
 }
@@ -25,13 +24,13 @@ unsafe impl Send for Arena {}
 impl Arena {
     pub fn new(block_size: usize) -> Arena {
         Arena {
-            core: RwLock::new(UnsafeCell::new(ArenaCore {
+            core: RwLock::new(ArenaCore {
                 blocks: vec![],
                 current_block: 0,
                 current_block_remaining: 0,
                 memory_usage: 0,
                 ptr: null_mut(),
-            })),
+            }),
             align: align_of::<Node>(),
             block_size,
         }
@@ -42,7 +41,7 @@ impl Arena {
     }
 
     pub fn memory_usage(&self) -> usize {
-        unsafe { self.core.read().unwrap().get().as_ref().unwrap() }.memory_usage
+        self.core.read().unwrap().memory_usage
     }
 
     pub fn allocate(&self, mut size: usize) -> *mut u8 {
@@ -53,8 +52,7 @@ impl Arena {
 
         size += slop;
 
-        let core_cell = self.core.write().unwrap();
-        let core = unsafe { core_cell.get().as_mut().unwrap() };
+        let mut core = self.core.write().unwrap();
 
         core.memory_usage += size;
 
