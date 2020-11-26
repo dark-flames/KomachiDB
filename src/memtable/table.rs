@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::format::{ValueTag, ValueType};
+use crate::logger::LogNumber;
 use crate::memtable::internal_key::{InternalKey, InternalKeyComparator};
 use crate::skip_list::{LevelGenerator, SkipList, SkipListIterator};
 use crate::Comparator;
@@ -8,14 +9,14 @@ use std::cmp::Ordering;
 
 #[allow(dead_code)]
 pub struct MemTableMut<C: Comparator> {
-    log_number: u64,
+    log_number: LogNumber,
     skip_list: SkipList<InternalKeyComparator<C>>,
 }
 
 #[allow(dead_code)]
 impl<C: Comparator> MemTableMut<C> {
     pub fn new(
-        log_number: u64,
+        log_number: LogNumber,
         level_generator: Box<dyn LevelGenerator>,
         block_size: usize,
     ) -> Self {
@@ -25,7 +26,7 @@ impl<C: Comparator> MemTableMut<C> {
         }
     }
 
-    pub fn log_number(&self) -> u64 {
+    pub fn log_number(&self) -> LogNumber {
         self.log_number
     }
 

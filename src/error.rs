@@ -7,6 +7,8 @@ pub type Result<T> = StdResult<T, Error>;
 pub enum Error {
     #[error("Sequence number overflow")]
     SequenceNumberOverflow,
+    #[error("Unable to create file at \"{0}\"")]
+    UnableToCreateFile(String),
 }
 
 #[macro_export]

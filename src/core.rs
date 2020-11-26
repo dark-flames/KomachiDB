@@ -1,17 +1,20 @@
+use crate::error::Result;
+use crate::logger::LogManager;
 use crate::memtable::{MemTable, MemTableMut};
 use crate::session::{Session, SessionFactory};
 use crate::skip_list::RandomLevelGenerator;
 use crate::Comparator;
 use std::mem::replace;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 #[allow(dead_code)]
 pub struct DBCore<C: Comparator> {
     session_factory: SessionFactory,
     memtable_log_number: AtomicU64,
-    mutable_memtable: Mutex<MemTableMut<C>>,
-    immutable_memtables: Mutex<Vec<MemTable<C>>>,
+    mutable_memtable: RwLock<MemTableMut<C>>,
+    immutable_memtables: RwLock<Vec<MemTable<C>>>,
+    log_manager: LogManager,
 }
 
 unsafe impl<C: Comparator> Sync for DBCore<C> {}
@@ -35,11 +38,14 @@ impl<C: Comparator> DBCore<C> {
         )
     }
 
-    fn renew_memtable(&self) {
-        let mut guard = self.mutable_memtable.lock().unwrap();
+    fn renew_memtable(&self) -> Result<()> {
+        let mut guard = self.mutable_memtable.write().unwrap();
         let old = replace(&mut *guard, self.create_memtable());
         let immutable = old.freeze();
+        self.log_manager.freeze_current_file(guard.log_number())?;
 
-        self.immutable_memtables.lock().unwrap().push(immutable);
+        self.immutable_memtables.write().unwrap().push(immutable);
+
+        Ok(())
     }
 }

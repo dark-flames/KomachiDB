@@ -9,6 +9,7 @@ mod db;
 mod format;
 mod helper;
 mod interface;
+mod logger;
 mod memtable;
 mod session;
 mod skip_list;
