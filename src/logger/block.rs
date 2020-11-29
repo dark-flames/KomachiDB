@@ -16,6 +16,12 @@ pub enum ChunkType {
     Last,
 }
 
+impl ChunkType {
+    pub fn is_ending(&self) -> bool {
+        matches!(self, ChunkType::Full | ChunkType::Last)
+    }
+}
+
 impl Into<u8> for ChunkType {
     fn into(self) -> u8 {
         match self {
@@ -40,8 +46,8 @@ impl From<&u8> for ChunkType {
 }
 
 pub struct Chunk<'a> {
-    pub ty: [u8; 1],
     pub data: Vec<&'a [u8]>,
+    ty: [u8; 1],
     data_size: [u8; 2],
     crc32: [u8; 4],
 }
@@ -79,8 +85,12 @@ impl<'a> Chunk<'a> {
             + size_of::<u16>() // size
     }
 
-    fn data_len(&self) -> u16 {
+    pub fn data_len(&self) -> u16 {
         u16::from_ne_bytes(self.data_size)
+    }
+
+    pub fn ty(&self) -> ChunkType {
+        ChunkType::from(&self.ty[0])
     }
 }
 
@@ -104,8 +114,8 @@ impl<'a> From<&'a [u8]> for Chunk<'a> {
         let crc32 = crc_bytes.try_into().unwrap();
         let (size_bytes, size_right) = crc_right.split_at(size_of::<u16>());
         let size: [u8; 2] = size_bytes.try_into().unwrap();
-        let (ty_byte, data) = size_right.split_at(size_of::<u8>());
-        assert_eq!(data.len(), u16::from_ne_bytes(size) as usize);
+        let (ty_byte, data_right) = size_right.split_at(size_of::<u8>());
+        let data = data_right.split_at(u16::from_ne_bytes(size) as usize).0;
         let ty = ty_byte.try_into().unwrap();
 
         Chunk {

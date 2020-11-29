@@ -3,6 +3,7 @@ use crate::logger::block::{Chunk, ChunkType};
 use std::ptr::slice_from_raw_parts;
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct Record<'a> {
     key_size: Box<[u8]>,
     key: &'a [u8],

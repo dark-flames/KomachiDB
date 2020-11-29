@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::logger::block::BLOCK_SIZE;
+use crate::logger::log_iterator::LogIterator;
 use crate::logger::record::Record;
 use std::fs::{remove_file, File};
 use std::io::{IoSlice, Write};
@@ -14,6 +14,7 @@ pub struct LogManager {
     current_log_number: AtomicU64,
     current_file: Mutex<File>,
     remaining_size: AtomicUsize,
+    block_size: AtomicUsize,
 }
 
 #[allow(dead_code)]
@@ -49,8 +50,10 @@ impl LogManager {
     pub fn insert_record(&self, record: Record) -> Result<()> {
         let mut buffer = self.current_file.lock().unwrap();
 
-        let (chunks, remaining_size) =
-            record.get_chunks(self.remaining_size.load(Ordering::SeqCst), BLOCK_SIZE);
+        let (chunks, remaining_size) = record.get_chunks(
+            self.remaining_size.load(Ordering::SeqCst),
+            self.block_size.load(Ordering::SeqCst),
+        );
 
         self.remaining_size.store(remaining_size, Ordering::SeqCst);
 
@@ -72,5 +75,18 @@ impl LogManager {
                 _ => Ok(()),
             },
         }
+    }
+
+    pub fn log_iterator(&self, log_number: LogNumber) -> Result<LogIterator> {
+        let file_path = self.log_file(log_number);
+        let file_name = file_path.to_str().unwrap().to_string();
+        let file =
+            File::open(file_path).map_err(|_| Error::UnableToReadLogFile(file_name.clone()))?;
+
+        Ok(LogIterator::new(
+            file_name,
+            self.block_size.load(Ordering::SeqCst),
+            file,
+        ))
     }
 }

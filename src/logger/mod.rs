@@ -1,4 +1,5 @@
 mod block;
+mod log_iterator;
 mod log_manager;
 mod record;
 mod tests;

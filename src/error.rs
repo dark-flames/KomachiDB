@@ -14,8 +14,10 @@ pub enum Error {
     UnableToTruncateLogFile(String),
     #[error("Unable to write log file: \"{0}\"")]
     UnableToWriteLogFile(String),
-    #[error("Unexpected chunk CRC code")]
-    UnexpectedChunkCRC,
+    #[error("Unable to read log file: \"{0}\"")]
+    UnableToReadLogFile(String),
+    #[error("Unexpected chunk CRC code at file: \"{0}\"")]
+    UnexpectedChunkCRC(String),
 }
 
 #[macro_export]
