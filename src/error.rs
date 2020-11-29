@@ -12,6 +12,8 @@ pub enum Error {
     UnableToCreateFile(String),
     #[error("Unable to truncate log file: \"{0}\"")]
     UnableToTruncateLogFile(String),
+    #[error("Unable to write log file: \"{0}\"")]
+    UnableToWriteLogFile(String),
     #[error("Unexpected chunk CRC code")]
     UnexpectedChunkCRC,
 }

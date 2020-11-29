@@ -1,4 +1,3 @@
-use bytes::{Bytes, BytesMut};
 use crc32fast::Hasher;
 use std::convert::TryInto;
 use std::mem::size_of;
@@ -9,6 +8,7 @@ pub const MAX_CHUNK_DATA_SIZE: usize = BLOCK_SIZE
     - size_of::<u32>() // crc
     - size_of::<u16>(); // size
 
+#[derive(Copy, Clone, Debug)]
 pub enum ChunkType {
     Full,
     First,
@@ -39,63 +39,80 @@ impl From<&u8> for ChunkType {
     }
 }
 
-pub struct Chunk {
-    pub ty: ChunkType,
-    pub data: Bytes,
-    crc32: u32,
+pub struct Chunk<'a> {
+    pub ty: [u8; 1],
+    pub data: Vec<&'a [u8]>,
+    data_size: [u8; 2],
+    crc32: [u8; 4],
 }
 
 #[allow(dead_code)]
-impl Chunk {
-    pub fn new(data: Bytes, ty: ChunkType) -> Self {
+impl<'a> Chunk<'a> {
+    pub fn new(data: Vec<&'a [u8]>, ty: ChunkType) -> Self {
         assert!(data.len() <= MAX_CHUNK_DATA_SIZE);
 
         let mut hasher = Hasher::new();
-        hasher.update(data.as_ref());
+        for item in data.clone() {
+            hasher.update(item);
+        }
 
         Chunk {
-            ty,
-            crc32: hasher.finalize(),
+            ty: [ty.into()],
+            crc32: hasher.finalize().to_ne_bytes(),
+            data_size: (data.len() as u16).to_ne_bytes(),
             data,
         }
     }
 
     pub fn check_crc32(&self) -> bool {
         let mut hasher = Hasher::new();
-        hasher.update(self.data.as_ref());
+        for item in self.data.clone() {
+            hasher.update(item);
+        }
 
-        hasher.finalize() == self.crc32
+        hasher.finalize() == u32::from_be_bytes(self.crc32)
+    }
+
+    pub fn len(&self) -> usize {
+        self.data_len() as usize + size_of::<u8>() // ty
+            + size_of::<u32>() // crc
+            + size_of::<u16>() // size
+    }
+
+    fn data_len(&self) -> u16 {
+        u16::from_ne_bytes(self.data_size)
     }
 }
 
-impl Into<Bytes> for Chunk {
-    fn into(self) -> Bytes {
-        let mut bytes = BytesMut::from(self.crc32.to_be_bytes().as_slice());
+impl<'a, 'b> Into<Vec<&'b [u8]>> for &'b Chunk<'a> {
+    fn into(self) -> Vec<&'b [u8]> {
+        let mut slices = vec![
+            self.crc32.as_slice(),
+            self.data_size.as_slice(),
+            self.ty.as_slice(),
+        ];
 
-        bytes.extend_from_slice((self.data.len() as u16).to_be_bytes().as_slice());
-        let ty: u8 = self.ty.into();
-        bytes.extend_from_slice(ty.to_be_bytes().as_slice());
-        bytes.extend_from_slice(self.data.as_ref());
+        slices.extend(self.data.clone());
 
-        assert!(bytes.len() <= BLOCK_SIZE);
-
-        bytes.freeze()
+        slices
     }
 }
 
-impl From<&[u8]> for Chunk {
-    fn from(bytes: &[u8]) -> Self {
+impl<'a> From<&'a [u8]> for Chunk<'a> {
+    fn from(bytes: &'a [u8]) -> Self {
         let (crc_bytes, crc_right) = bytes.split_at(size_of::<u32>());
-        let crc32 = u32::from_be_bytes(crc_bytes.try_into().unwrap());
+        let crc32 = crc_bytes.try_into().unwrap();
         let (size_bytes, size_right) = crc_right.split_at(size_of::<u16>());
-        let size = u16::from_be_bytes(size_bytes.try_into().unwrap());
+        let size: [u8; 2] = size_bytes.try_into().unwrap();
         let (ty_byte, data) = size_right.split_at(size_of::<u8>());
-        let ty = ty_byte.first().unwrap().into();
+        assert_eq!(data.len(), u16::from_ne_bytes(size) as usize);
+        let ty = ty_byte.try_into().unwrap();
 
         Chunk {
             ty,
             crc32,
-            data: Bytes::copy_from_slice(data.split_at(size as usize).0),
+            data: vec![data],
+            data_size: (data.len() as u16).to_ne_bytes(),
         }
     }
 }
