@@ -10,6 +10,8 @@ pub enum Error {
     SequenceNumberOverflow,
     #[error("Unable to create file at \"{0}\"")]
     UnableToCreateFile(String),
+    #[error("Unable to read dir \"{0}\"")]
+    UnableToReadDir(String),
     #[error("Unable to truncate log file: \"{0}\"")]
     UnableToTruncateLogFile(String),
     #[error("Unable to write log file: \"{0}\"")]

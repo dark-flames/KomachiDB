@@ -1,9 +1,11 @@
 use crate::error::{Error, Result};
 use crate::logger::log_iterator::LogIterator;
 use crate::logger::record::Record;
-use std::fs::{remove_file, File};
-use std::io::{IoSlice, Write};
+use regex::Regex;
+use std::fs::{read_dir, remove_file, DirEntry, File};
+use std::io::{Error as IOError, IoSlice, Write};
 use std::path::{Path, PathBuf};
+use std::result::Result as STDResult;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
@@ -88,5 +90,28 @@ impl LogManager {
             self.block_size.load(Ordering::SeqCst),
             file,
         ))
+    }
+
+    pub fn get_exist_log_number(&self) -> Result<Vec<LogNumber>> {
+        let entries = read_dir(&self.dir)
+            .map_err(|_| Error::UnableToReadDir(self.dir.to_str().unwrap().to_string()))?
+            .collect::<STDResult<Vec<DirEntry>, IOError>>()
+            .map_err(|_| Error::UnableToReadDir(self.dir.to_str().unwrap().to_string()))?;
+
+        Ok(entries
+            .into_iter()
+            .filter_map(|entry| {
+                let regex = Regex::new(r"^log_(\d+)$").unwrap();
+
+                regex
+                    .captures(entry.file_name().to_str().unwrap())
+                    .map(|result| {
+                        result
+                            .get(1)
+                            .map(|num| num.as_str().parse::<LogNumber>().unwrap())
+                    })
+                    .flatten()
+            })
+            .collect())
     }
 }
