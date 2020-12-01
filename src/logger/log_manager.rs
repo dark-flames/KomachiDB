@@ -21,6 +21,20 @@ pub struct LogManager {
 
 #[allow(dead_code)]
 impl LogManager {
+    pub fn new(dir: Box<Path>, first_log_number: LogNumber, block_size: usize) -> Result<Self> {
+        Ok(LogManager {
+            dir: dir.clone(),
+            current_log_number: AtomicU64::new(first_log_number),
+            current_file: Mutex::new(
+                File::create(dir.join(format!("log_{}", first_log_number))).map_err(|_| {
+                    Error::UnableToCreateFile(dir.as_os_str().to_str().unwrap().to_string())
+                })?,
+            ),
+            remaining_size: AtomicUsize::new(block_size),
+            block_size: AtomicUsize::new(block_size),
+        })
+    }
+
     fn log_file(&self, log_number: LogNumber) -> PathBuf {
         self.dir.join(format!("log_{}", log_number))
     }

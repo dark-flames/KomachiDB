@@ -8,7 +8,7 @@ pub const MAX_CHUNK_DATA_SIZE: usize = BLOCK_SIZE
     - size_of::<u32>() // crc
     - size_of::<u16>(); // size
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ChunkType {
     Full,
     First,
@@ -76,7 +76,7 @@ impl<'a> Chunk<'a> {
             hasher.update(item);
         }
 
-        hasher.finalize() == u32::from_be_bytes(self.crc32)
+        hasher.finalize() == u32::from_ne_bytes(self.crc32)
     }
 
     pub fn len(&self) -> usize {
@@ -91,6 +91,16 @@ impl<'a> Chunk<'a> {
 
     pub fn ty(&self) -> ChunkType {
         ChunkType::from(&self.ty[0])
+    }
+
+    pub fn crc32(&self) -> u32 {
+        u32::from_ne_bytes(self.crc32)
+    }
+}
+
+impl<'a> AsRef<Chunk<'a>> for Chunk<'a> {
+    fn as_ref(&self) -> &Chunk<'a> {
+        self
     }
 }
 

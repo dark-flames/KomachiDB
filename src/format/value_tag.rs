@@ -46,13 +46,13 @@ impl Into<WrappedValueTag> for ValueTag {
             ValueType::TombStone => self.sequence_number | 1u64 << (size_of::<u64>() * 8 - 1),
         };
 
-        num.to_be_bytes()
+        num.to_ne_bytes()
     }
 }
 
 impl From<WrappedValueTag> for ValueTag {
     fn from(wrapped_tag: WrappedValueTag) -> Self {
-        let num = u64::from_be_bytes(wrapped_tag);
+        let num = u64::from_ne_bytes(wrapped_tag);
         let sequence_number = num & !(1u64 << (size_of::<u64>() * 8 - 1));
         let ty = if (num & 1u64 << (size_of::<u64>() * 8 - 1)) == 0 {
             ValueType::Value
@@ -69,7 +69,7 @@ impl From<WrappedValueTag> for ValueTag {
 
 impl From<*const u8> for ValueTag {
     fn from(ptr: *const u8) -> Self {
-        let slice = unsafe { *(ptr as *const u64) }.to_be_bytes();
+        let slice = unsafe { *(ptr as *const u64) }.to_ne_bytes();
         Self::from(slice)
     }
 }
