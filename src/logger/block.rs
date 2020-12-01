@@ -2,11 +2,9 @@ use crc32fast::Hasher;
 use std::convert::TryInto;
 use std::mem::size_of;
 
-pub const BLOCK_SIZE: usize = 32 * 1024;
-pub const MAX_CHUNK_DATA_SIZE: usize = BLOCK_SIZE
-    - size_of::<u8>() // ty
-    - size_of::<u32>() // crc
-    - size_of::<u16>(); // size
+pub const CHUNK_HEAD_SIZE: usize = size_of::<u8>() // ty
+    + size_of::<u32>() // crc
+    + size_of::<u16>();
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ChunkType {
@@ -55,17 +53,17 @@ pub struct Chunk<'a> {
 #[allow(dead_code)]
 impl<'a> Chunk<'a> {
     pub fn new(data: Vec<&'a [u8]>, ty: ChunkType) -> Self {
-        assert!(data.len() <= MAX_CHUNK_DATA_SIZE);
-
         let mut hasher = Hasher::new();
         for item in data.clone() {
             hasher.update(item);
         }
 
+        let data_size = data.iter().fold(0, |carry, item| carry + item.len()) as u16;
+
         Chunk {
             ty: [ty.into()],
             crc32: hasher.finalize().to_ne_bytes(),
-            data_size: (data.len() as u16).to_ne_bytes(),
+            data_size: data_size.to_ne_bytes(),
             data,
         }
     }
@@ -80,9 +78,7 @@ impl<'a> Chunk<'a> {
     }
 
     pub fn len(&self) -> usize {
-        self.data_len() as usize + size_of::<u8>() // ty
-            + size_of::<u32>() // crc
-            + size_of::<u16>() // size
+        self.data_len() as usize + CHUNK_HEAD_SIZE // size
     }
 
     pub fn data_len(&self) -> u16 {

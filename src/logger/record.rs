@@ -1,5 +1,5 @@
 use crate::format::{decode_usize, encode_usize};
-use crate::logger::block::{Chunk, ChunkType};
+use crate::logger::block::{Chunk, ChunkType, CHUNK_HEAD_SIZE};
 use std::ptr::slice_from_raw_parts;
 
 #[allow(dead_code)]
@@ -22,13 +22,28 @@ impl<'a> Record<'a> {
         }
     }
 
+    pub fn key_size(&self) -> usize {
+        decode_usize(self.key_size.as_ptr()).0
+    }
+
+    pub fn value_size(&self) -> usize {
+        decode_usize(self.value.as_ptr()).0
+    }
+
     fn get_data(&self) -> Vec<&[u8]> {
-        vec![
-            self.key_size.as_ref(),
-            self.key,
-            self.value_size.as_ref(),
-            self.value,
-        ]
+        let mut data = vec![self.key_size.as_ref()];
+
+        if self.key_size() != 0 {
+            data.push(self.key)
+        }
+
+        data.push(self.value_size.as_ref());
+
+        if self.value_size() != 0 {
+            data.push(self.value)
+        }
+
+        data
     }
 
     fn get_next_part(&self, pos: usize) -> Option<&[u8]> {
@@ -41,7 +56,7 @@ impl<'a> Record<'a> {
                 _ => break None,
             };
 
-            if sum + part.len() >= pos {
+            if sum + part.len() > pos {
                 let offset = pos - sum;
 
                 break Some(part.split_at(offset).1);
@@ -51,20 +66,23 @@ impl<'a> Record<'a> {
         }
     }
 
-    fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.get_data()
             .into_iter()
             .fold(0, |carry, item| carry + item.len())
     }
 
     fn get_next_chunk(&self, size: usize, mut pos: usize) -> Option<(Chunk, usize)> {
-        let mut data = vec![];
+        let mut data: Vec<&[u8]> = vec![];
+        let mut data_size = 0;
+
+        let chunk_data_size = size - CHUNK_HEAD_SIZE;
 
         let ty = loop {
             let part = match self.get_next_part(pos) {
                 Some(p) => p,
                 _ => {
-                    break if self.len() <= size {
+                    break if self.len() <= chunk_data_size {
                         ChunkType::Full
                     } else {
                         ChunkType::Last
@@ -72,15 +90,17 @@ impl<'a> Record<'a> {
                 }
             };
 
-            if data.len() + part.len() <= size {
+            if data_size + part.len() <= chunk_data_size {
                 data.push(part);
+                data_size += part.len();
                 pos += part.len();
             } else {
-                let part_size = size - data.len();
+                let part_size = chunk_data_size - data_size;
+                data_size += part_size;
                 data.push(part.split_at(part_size).0);
 
                 pos += part_size;
-                break if pos == part_size {
+                break if pos == data_size {
                     ChunkType::First
                 } else {
                     ChunkType::Middle
