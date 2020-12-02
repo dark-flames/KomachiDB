@@ -86,7 +86,7 @@ impl<'a> Record<'a> {
     }
 
     fn get_next_chunk(&self, size: usize, mut pos: usize) -> Option<(Chunk, usize)> {
-        assert!(size > MIN_CHUNK_SIZE);
+        assert!(size >= MIN_CHUNK_SIZE);
         let mut data: Vec<&[u8]> = vec![];
         let mut data_size = 0;
 

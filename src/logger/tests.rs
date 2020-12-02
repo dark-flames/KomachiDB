@@ -4,10 +4,12 @@ use crate::logger::record::{Record, RecordChunk};
 use crate::logger::LogManager;
 use bytes::{Bytes, BytesMut};
 use rand::distributions::Alphanumeric;
-use rand::{random, Rng};
+use rand::seq::SliceRandom;
+use rand::{random, thread_rng, Rng};
 use std::convert::TryInto;
 use std::env::temp_dir;
 use std::fs::create_dir;
+use std::sync::Arc;
 
 fn create_random_bytes(size: usize) -> Bytes {
     let rng = &mut rand::thread_rng();
@@ -144,16 +146,13 @@ fn test_log_manager() {
     tmp_dir.push(format!("komachi_test_log_{}", random::<u16>()));
     create_dir(tmp_dir.clone()).unwrap();
 
-    let work_dir = tmp_dir.as_path();
-
-    let manager = LogManager::new(work_dir, 0, 4 * 1024).unwrap();
+    let manager = LogManager::new(tmp_dir, 0, 4 * 1024).unwrap();
     manager.freeze_current_file(1).unwrap();
-
-    let value = create_random_bytes(10000);
 
     let keys: Vec<u32> = (0..1500).collect();
 
     for key in keys.iter() {
+        let value = create_random_bytes(random::<u8>() as usize);
         manager
             .insert_record(Record::new(key.to_ne_bytes().as_slice(), value.as_ref()))
             .unwrap();
@@ -178,4 +177,56 @@ fn test_log_manager() {
 
     manager.truncate_log(0).unwrap();
     assert_eq!(manager.get_exist_log_number().unwrap(), vec![1]);
+}
+
+#[test]
+fn test_log_concurrent() {
+    let mut tmp_dir = temp_dir();
+    tmp_dir.push(format!("komachi_test_log_{}", random::<u16>()));
+    create_dir(tmp_dir.clone()).unwrap();
+
+    let manager = Arc::new(LogManager::new(tmp_dir, 0, 4 * 1024).unwrap());
+
+    let pool = threadpool::ThreadPool::new(72);
+
+    let mut keys: Vec<u32> = (0..100000).collect();
+    let mut rng = thread_rng();
+    keys.shuffle(&mut rng);
+
+    let mut sorted_keys = keys.clone();
+    sorted_keys.sort();
+
+    for key in keys {
+        let manager_ref = manager.clone();
+        let k = key;
+        let value = create_random_bytes(random::<u8>() as usize);
+        pool.execute(move || {
+            manager_ref
+                .insert_record(Record::new(k.to_ne_bytes().as_slice(), value.as_ref()))
+                .unwrap()
+        })
+    }
+
+    pool.join();
+
+    manager.freeze_current_file(1).unwrap();
+
+    let iter = manager.log_iterator(0).unwrap();
+
+    let mut result_keys = iter
+        .map(|item| {
+            item.map(|wrapper| {
+                let record = wrapper.record();
+                let array: [u8; 4] = record.key().try_into().unwrap();
+                u32::from_ne_bytes(array)
+            })
+        })
+        .collect::<Result<Vec<u32>>>()
+        .unwrap();
+
+    result_keys.sort();
+
+    assert_eq!(result_keys, sorted_keys);
+
+    std::mem::drop(manager);
 }

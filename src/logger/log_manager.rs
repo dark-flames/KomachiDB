@@ -12,19 +12,20 @@ use std::sync::Mutex;
 
 pub type LogNumber = u64;
 
-pub struct LogManager<'a> {
-    dir: &'a Path,
+pub struct LogManager {
+    dir: PathBuf,
     current_log_number: AtomicU64,
     current_file: Mutex<File>,
     remaining_size: AtomicUsize,
     block_size: AtomicUsize,
 }
 
+// todo: use
 #[allow(dead_code)]
-impl<'a> LogManager<'a> {
-    pub fn new(dir: &'a Path, first_log_number: LogNumber, block_size: usize) -> Result<Self> {
+impl LogManager {
+    pub fn new(dir: PathBuf, first_log_number: LogNumber, block_size: usize) -> Result<Self> {
         Ok(LogManager {
-            dir,
+            dir: dir.clone(),
             current_log_number: AtomicU64::new(first_log_number),
             current_file: Mutex::new(
                 File::create(dir.join(format!("log_{}", first_log_number))).map_err(|_| {
@@ -36,8 +37,12 @@ impl<'a> LogManager<'a> {
         })
     }
 
+    fn dir(&self) -> &Path {
+        self.dir.as_path()
+    }
+
     fn log_file(&self, log_number: LogNumber) -> PathBuf {
-        self.dir.join(format!("log_{}", log_number))
+        self.dir().join(format!("log_{}", log_number))
     }
 
     fn current_log_file(&self) -> PathBuf {
@@ -45,9 +50,12 @@ impl<'a> LogManager<'a> {
     }
 
     pub fn freeze_current_file(&self, new_log_number: LogNumber) -> Result<()> {
-        let mut old_guard = self.current_file.lock().unwrap();
+        let mut old_guard = match self.current_file.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         *old_guard = File::create(self.log_file(new_log_number)).map_err(|_| {
-            Error::UnableToCreateFile(self.dir.as_os_str().to_str().unwrap().to_string())
+            Error::UnableToCreateFile(self.dir().as_os_str().to_str().unwrap().to_string())
         })?;
         self.current_log_number
             .store(new_log_number, Ordering::SeqCst);
@@ -65,7 +73,10 @@ impl<'a> LogManager<'a> {
     }
 
     pub fn insert_record(&self, record: Record) -> Result<()> {
-        let mut buffer = self.current_file.lock().unwrap();
+        let mut buffer = match self.current_file.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
 
         let (chunks, remaining_size) = record.get_chunks(
             self.remaining_size.load(Ordering::SeqCst),
@@ -132,7 +143,7 @@ impl<'a> LogManager<'a> {
     }
 
     pub fn get_exist_log_number(&self) -> Result<Vec<LogNumber>> {
-        let entries = read_dir(&self.dir)
+        let entries = read_dir(&self.dir())
             .map_err(|_| Error::UnableToReadDir(self.dir.to_str().unwrap().to_string()))?
             .collect::<STDResult<Vec<DirEntry>, IOError>>()
             .map_err(|_| Error::UnableToReadDir(self.dir.to_str().unwrap().to_string()))?;

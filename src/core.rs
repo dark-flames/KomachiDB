@@ -14,7 +14,7 @@ pub struct DBCore<C: Comparator> {
     memtable_log_number: AtomicU64,
     mutable_memtable: RwLock<MemTableMut<C>>,
     immutable_memtables: RwLock<Vec<MemTable<C>>>,
-    log_manager: LogManager<'static>,
+    log_manager: LogManager,
 }
 
 unsafe impl<C: Comparator> Sync for DBCore<C> {}
