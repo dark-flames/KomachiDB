@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::logger::block::Chunk;
+use crate::logger::chunk::{Chunk, MIN_CHUNK_SIZE};
 use crate::logger::record::Record;
 use std::fs::File;
 use std::io::Read;
@@ -20,6 +20,7 @@ pub struct LogIterator {
     file_name: String,
     block_size: usize,
     suffix: Vec<u8>,
+    end_of_file: bool,
 }
 
 impl LogIterator {
@@ -29,6 +30,7 @@ impl LogIterator {
             file_name,
             block_size,
             suffix: vec![],
+            end_of_file: false,
         }
     }
 }
@@ -38,19 +40,26 @@ impl Iterator for LogIterator {
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut data = vec![];
-        let first = true;
+
+        if self.end_of_file && self.suffix.len() < MIN_CHUNK_SIZE {
+            return None;
+        }
 
         loop {
             let mut block = vec![0; self.block_size];
-            let (mut block_ref, ending) = if first {
-                (self.suffix.as_slice(), false)
+            let mut block_ref = if self.suffix.len() >= MIN_CHUNK_SIZE {
+                self.suffix.as_slice()
             } else {
-                let ending = match self.file.read(&mut block) {
-                    Ok(bytes) => bytes != self.block_size,
+                let bytes = match self.file.read(&mut block[..]) {
+                    Ok(bytes) => bytes,
                     Err(_) => return Some(Err(Error::UnableToReadLogFile(self.file_name.clone()))),
                 };
 
-                (block.as_slice(), ending)
+                if bytes != self.block_size {
+                    self.end_of_file = true
+                }
+
+                block.as_slice().split_at(bytes).0
             };
 
             let find_ending_chunk = loop {
@@ -64,26 +73,23 @@ impl Iterator for LogIterator {
                 let size = chunk.len();
                 data.extend_from_slice(chunk.data.first().cloned().unwrap());
 
-                if size == block_ref.len() {
-                    break false;
-                } else {
-                    block_ref = block_ref.split_at(size).1;
+                let left = block_ref.len() - size;
+                block_ref = block_ref.split_at(size).1;
 
-                    if ty.is_ending() {
-                        break true;
-                    }
+                if left < MIN_CHUNK_SIZE {
+                    break ty.is_ending();
+                } else if ty.is_ending() {
+                    break true;
                 }
             };
 
-            if find_ending_chunk {
-                if !block_ref.is_empty() {
-                    self.suffix = Vec::from(block_ref);
-                }
-
-                break;
+            if block_ref.len() >= MIN_CHUNK_SIZE {
+                self.suffix = Vec::from(block_ref);
+            } else {
+                self.suffix = vec![];
             }
 
-            if ending {
+            if find_ending_chunk {
                 break;
             }
         }

@@ -1,6 +1,11 @@
 use crate::format::{decode_usize, encode_usize};
-use crate::logger::block::{Chunk, ChunkType, CHUNK_HEAD_SIZE};
+use crate::logger::chunk::{Chunk, ChunkType, CHUNK_HEAD_SIZE, MIN_CHUNK_SIZE};
 use std::ptr::slice_from_raw_parts;
+
+pub enum RecordChunk<'a> {
+    Normal(Chunk<'a>),
+    Slop(usize),
+}
 
 #[allow(dead_code)]
 #[derive(Clone)]
@@ -28,6 +33,20 @@ impl<'a> Record<'a> {
 
     pub fn value_size(&self) -> usize {
         decode_usize(self.value.as_ptr()).0
+    }
+
+    pub fn len(&self) -> usize {
+        self.get_data()
+            .into_iter()
+            .fold(0, |carry, item| carry + item.len())
+    }
+
+    pub fn key(&self) -> &[u8] {
+        self.key
+    }
+
+    pub fn value(&self) -> &[u8] {
+        self.value
     }
 
     fn get_data(&self) -> Vec<&[u8]> {
@@ -66,13 +85,8 @@ impl<'a> Record<'a> {
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.get_data()
-            .into_iter()
-            .fold(0, |carry, item| carry + item.len())
-    }
-
     fn get_next_chunk(&self, size: usize, mut pos: usize) -> Option<(Chunk, usize)> {
+        assert!(size > MIN_CHUNK_SIZE);
         let mut data: Vec<&[u8]> = vec![];
         let mut data_size = 0;
 
@@ -111,11 +125,13 @@ impl<'a> Record<'a> {
         if data.is_empty() {
             None
         } else {
-            Some((Chunk::new(data, ty), pos))
+            let chunk = Chunk::new(data, ty);
+
+            Some((chunk, pos))
         }
     }
 
-    pub fn get_chunks(&self, first_size: usize, max_size: usize) -> (Vec<Chunk>, usize) {
+    pub fn get_chunks(&self, first_size: usize, max_size: usize) -> (Vec<RecordChunk>, usize) {
         let mut chunks = vec![];
 
         let mut left_size = first_size;
@@ -123,15 +139,19 @@ impl<'a> Record<'a> {
         let mut pos = 0;
 
         while let Some((c, new_pos)) = self.get_next_chunk(left_size, pos) {
-            let len = c.data.len();
+            let len = c.len();
             assert!(len <= left_size);
+            chunks.push(RecordChunk::Normal(c));
 
             left_size = match left_size - len {
                 0 => max_size,
+                others if others < MIN_CHUNK_SIZE => {
+                    chunks.push(RecordChunk::Slop(others));
+                    max_size
+                }
                 others => others,
             };
 
-            chunks.push(c);
             pos = new_pos;
         }
 

@@ -1,7 +1,8 @@
 use crate::error::{Error, Result};
 use crate::logger::log_iterator::LogIterator;
-use crate::logger::record::Record;
+use crate::logger::record::{Record, RecordChunk};
 use regex::Regex;
+use std::cmp::max;
 use std::fs::{read_dir, remove_file, DirEntry, File};
 use std::io::{Error as IOError, IoSlice, Write};
 use std::path::{Path, PathBuf};
@@ -11,8 +12,8 @@ use std::sync::Mutex;
 
 pub type LogNumber = u64;
 
-pub struct LogManager {
-    dir: Box<Path>,
+pub struct LogManager<'a> {
+    dir: &'a Path,
     current_log_number: AtomicU64,
     current_file: Mutex<File>,
     remaining_size: AtomicUsize,
@@ -20,10 +21,10 @@ pub struct LogManager {
 }
 
 #[allow(dead_code)]
-impl LogManager {
-    pub fn new(dir: Box<Path>, first_log_number: LogNumber, block_size: usize) -> Result<Self> {
+impl<'a> LogManager<'a> {
+    pub fn new(dir: &'a Path, first_log_number: LogNumber, block_size: usize) -> Result<Self> {
         Ok(LogManager {
-            dir: dir.clone(),
+            dir,
             current_log_number: AtomicU64::new(first_log_number),
             current_file: Mutex::new(
                 File::create(dir.join(format!("log_{}", first_log_number))).map_err(|_| {
@@ -73,18 +74,42 @@ impl LogManager {
 
         self.remaining_size.store(remaining_size, Ordering::SeqCst);
 
-        let slices: Vec<_> = chunks
-            .iter()
-            .map::<Vec<&[u8]>, _>(|chunk| chunk.into())
-            .flatten()
-            .map(|slice| IoSlice::new(slice))
-            .collect();
+        let slop: Vec<u8> = vec![
+            0;
+            chunks.iter().fold(0, |carry, record_chunk| {
+                max(
+                    carry,
+                    match record_chunk {
+                        RecordChunk::Slop(size) => *size,
+                        _ => 0,
+                    },
+                )
+            })
+        ];
 
-        match buffer.write_vectored(slices.as_ref()) {
+        let mut slices = vec![];
+
+        for chunk in chunks.iter() {
+            match chunk {
+                RecordChunk::Normal(c) => {
+                    let chunk_slices: Vec<&[u8]> = c.into();
+                    let mut sum = 0;
+                    slices.extend(chunk_slices.into_iter().map(|slice| {
+                        sum += slice.len();
+                        IoSlice::new(slice)
+                    }));
+                }
+                RecordChunk::Slop(size) => {
+                    slices.push(IoSlice::new(slop.as_slice().split_at(*size).0))
+                }
+            }
+        }
+
+        match buffer.write_all_vectored(slices.as_mut_slice()) {
             Err(_) => Err(Error::UnableToWriteLogFile(
                 self.current_log_file().to_str().unwrap().to_string(),
             )),
-            _ => match buffer.flush() {
+            Ok(_) => match buffer.flush() {
                 Err(_) => Err(Error::UnableToWriteLogFile(
                     self.current_log_file().to_str().unwrap().to_string(),
                 )),
@@ -112,19 +137,26 @@ impl LogManager {
             .collect::<STDResult<Vec<DirEntry>, IOError>>()
             .map_err(|_| Error::UnableToReadDir(self.dir.to_str().unwrap().to_string()))?;
 
+        let current_log_number = self.current_log_number.load(Ordering::SeqCst);
+
         Ok(entries
             .into_iter()
             .filter_map(|entry| {
                 let regex = Regex::new(r"^log_(\d+)$").unwrap();
 
-                regex
+                let result = regex
                     .captures(entry.file_name().to_str().unwrap())
                     .map(|result| {
                         result
                             .get(1)
                             .map(|num| num.as_str().parse::<LogNumber>().unwrap())
                     })
-                    .flatten()
+                    .flatten();
+
+                match result {
+                    Some(n) if n == current_log_number => None,
+                    others => others,
+                }
             })
             .collect())
     }

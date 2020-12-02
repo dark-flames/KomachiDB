@@ -6,6 +6,8 @@ pub const CHUNK_HEAD_SIZE: usize = size_of::<u8>() // ty
     + size_of::<u32>() // crc
     + size_of::<u16>();
 
+pub const MIN_CHUNK_SIZE: usize = CHUNK_HEAD_SIZE * 2;
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ChunkType {
     Full,
@@ -116,11 +118,19 @@ impl<'a, 'b> Into<Vec<&'b [u8]>> for &'b Chunk<'a> {
 
 impl<'a> From<&'a [u8]> for Chunk<'a> {
     fn from(bytes: &'a [u8]) -> Self {
+        assert!(bytes.len() >= MIN_CHUNK_SIZE);
         let (crc_bytes, crc_right) = bytes.split_at(size_of::<u32>());
         let crc32 = crc_bytes.try_into().unwrap();
         let (size_bytes, size_right) = crc_right.split_at(size_of::<u16>());
         let size: [u8; 2] = size_bytes.try_into().unwrap();
         let (ty_byte, data_right) = size_right.split_at(size_of::<u8>());
+        if u16::from_ne_bytes(size) as usize > data_right.len() {
+            panic!(format!(
+                "data_right: {}, size: {}",
+                data_right.len(),
+                u16::from_ne_bytes(size)
+            ))
+        }
         let data = data_right.split_at(u16::from_ne_bytes(size) as usize).0;
         let ty = ty_byte.try_into().unwrap();
 

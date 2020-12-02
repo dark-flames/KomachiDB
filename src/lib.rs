@@ -1,6 +1,7 @@
 #![feature(slice_ptr_len)]
 #![feature(slice_ptr_get)]
 #![feature(array_methods)]
+#![feature(write_all_vectored)]
 
 #[macro_use]
 mod error;
